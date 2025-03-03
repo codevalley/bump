@@ -134,6 +134,8 @@ async fn test_concurrent_queue_operations() {
             format!("recv_{}", i)
         };
         let match_req = create_receive_request(&format!("match_{}", i), 60, Some("test_key".to_string()));
+        
+        // Try to find a match
         let result = queue.find_match(&match_req).await;
         assert!(result.is_ok(), "Should be able to find match for {}", id);
     }
@@ -184,6 +186,7 @@ async fn test_concurrent_matching() {
                 Some("test_key".to_string())
             );
             queue.add_request(receive_request.clone()).await.unwrap();
+            // Find a match directly
             queue.find_match(&receive_request).await
         });
         handles.push(handle);
@@ -390,6 +393,7 @@ async fn test_expired_request_cleanup() {
     let mut test_req = create_receive_request("test_matcher", 5, Some("test_key".to_string()));
     test_req.matching_data.timestamp = long_expire.matching_data.timestamp; // Ensure timestamp matches exactly
     
+    // Find a match directly
     let match_result = tokio::time::timeout(
         Duration::from_millis(500),
         queue.find_match(&test_req)
@@ -533,7 +537,7 @@ async fn test_advanced_event_broadcasting() {
     for i in 0..half_receive {
         queue.add_request(receive_requests[i].clone()).await.unwrap();
         
-        // Try to find a match for each receive request to generate match events
+        // Try to find a match for each receive request
         let match_result = queue.find_match(&receive_requests[i]).await.unwrap();
         assert!(match_result.is_some(), "Should find a match for receive request {}", i);
     }
@@ -557,7 +561,7 @@ async fn test_advanced_event_broadcasting() {
     for i in half_receive..receive_requests.len() {
         queue.add_request(receive_requests[i].clone()).await.unwrap();
         
-        // Try to find a match for each receive request to generate match events
+        // Try to find a match for each receive request
         let match_result = queue.find_match(&receive_requests[i]).await.unwrap();
         assert!(match_result.is_some(), "Should find a match for receive request {}", i);
     }
@@ -756,7 +760,7 @@ async fn test_thread_safety_with_clones() {
     // Then create and add a matching receive request
     let match_request = create_receive_request("thread_safety_match", 60, Some(final_key.to_string()));
     
-    // Find a match - this should match with our final_request
+    // Find a match directly
     let match_result = original_queue.find_match(&match_request).await.unwrap();
     assert!(match_result.is_some(), "Final matching attempt should succeed");
     
@@ -770,6 +774,7 @@ async fn test_thread_safety_with_clones() {
     let different_idx = (random_idx + 1) % queue_count;
     let match_request = create_receive_request("final_match", 60, Some("final_key".to_string()));
     
+    // Find a match directly
     let match_result = queues[different_idx].find_match(&match_request).await.unwrap();
     assert!(match_result.is_some(), "Should find the request added to a different queue clone");
     assert_eq!(match_result.unwrap().id, "final_test", "Should match the correct request");
@@ -840,20 +845,21 @@ async fn test_race_conditions_in_matching() {
             // Add receive request
             queue.add_request(recv_req.clone()).await.unwrap();
             
-            // Try to find a match
-            let match_result = queue.find_match(&recv_req).await.unwrap();
+            // Try to find a match directly
+            let matched = queue.find_match(&recv_req).await.unwrap();
             
-            if let Some(matched) = match_result {
+            if let Some(matched_req) = matched {
+                
                 // Extract the index from the ID
-                let id_parts: Vec<&str> = matched.id.split('_').collect();
-                if id_parts.len() >= 2 {
-                    if let Ok(idx) = id_parts[1].parse::<usize>() {
-                        if idx < pair_count {
-                            matched_flags[idx].store(true, Ordering::SeqCst);
-                            return Some(matched);
+                let id_parts: Vec<&str> = matched_req.id.split('_').collect();
+                    if id_parts.len() >= 2 {
+                        if let Ok(idx) = id_parts[1].parse::<usize>() {
+                            if idx < pair_count {
+                                matched_flags[idx].store(true, Ordering::SeqCst);
+                                return Some(matched_req);
+                            }
                         }
                     }
-                }
             }
             
             None
@@ -909,7 +915,8 @@ async fn test_race_conditions_in_matching() {
     let final_recv = create_receive_request("final_recv", 60, Some("final_key".to_string()));
     queue.add_request(final_recv.clone()).await.unwrap();
     
-    let final_match = queue.find_match(&final_recv).await.unwrap();
-    assert!(final_match.is_some(), "Final match should succeed");
-    assert_eq!(final_match.unwrap().id, "final_send", "Should match the correct request");
+    // Find a match directly
+    let match_result = queue.find_match(&final_recv).await.unwrap();
+    assert!(match_result.is_some(), "Final match should succeed");
+    assert_eq!(match_result.unwrap().id, "final_send", "Should match the correct request");
 }

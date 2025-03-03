@@ -90,6 +90,7 @@ pub struct MemoryQueue {
     max_size: usize,
 }
 
+
 impl Clone for MemoryQueue {
     fn clone(&self) -> Self {
         // Clone just shares the Arc references, ensuring all clones
@@ -315,12 +316,12 @@ impl RequestQueue for MemoryQueue {
         Ok(())
     }
     
+    
     async fn find_match(&self, request: &QueuedRequest) -> Result<Option<QueuedRequest>, BumpError> {
         let mut requests = self.requests.write();
         let now = OffsetDateTime::now_utc();
         
-
-        
+        // Find the best matching request
         let best_match = requests.iter()
             .filter(|(_, r)| r.expires_at > now)
             .filter_map(|(id, r)| {
@@ -330,15 +331,15 @@ impl RequestQueue for MemoryQueue {
             .max_by_key(|(_, _, score)| *score);
             
         if let Some((id, matched_req, _score)) = best_match {
-            // Found match
-            // Remove the matched request from the queue
+            // Found match - remove it from the queue
             requests.remove(&id);
             
             // Notify subscribers about the match
             let _ = self.event_tx.send(RequestEvent {
                 request: matched_req.clone(),
-                event_type: RequestEventType::Matched(id),
+                event_type: RequestEventType::Matched(request.id.clone()),
             });
+            
             Ok(Some(matched_req))
         } else {
             // No match found
@@ -354,11 +355,13 @@ impl RequestQueue for MemoryQueue {
         let mut requests = self.requests.write();
         let now = OffsetDateTime::now_utc();
         
+        // Collect expired requests
         let expired: Vec<_> = requests.iter()
             .filter(|(_, r)| r.expires_at <= now)
             .map(|(id, _)| id.clone())
             .collect();
             
+        // Remove all expired requests
         for id in expired {
             if let Some(request) = requests.remove(&id) {
                 let _ = self.event_tx.send(RequestEvent {

@@ -103,6 +103,78 @@ The matching algorithm has the following configurable parameters:
 - Score: N/A (immediate rejection due to key mismatch)
 - Result: NO MATCH
 
+## Race Conditions and Two-Phase Matching
+
+### The Race Condition Problem
+
+The initial implementation of the matching algorithm had a subtle race condition that could lead to "stuck" requests. Here's how it manifested:
+
+1. **When Send Request Arrives First:**
+   ```
+   Send Request                 Receive Request
+   1. Check receive queue      
+   2. No match found          
+   3. Add to send queue       
+   4. Wait for match...       1. Check send queue
+                              2. Find match
+                              3. Remove send request
+                              4. Return success
+   5. Still waiting...        (Done)
+   ```
+
+2. **When Receive Request Arrives First:**
+   ```
+   Receive Request             Send Request
+   1. Check send queue        
+   2. No match found         
+   3. Add to receive queue    
+   4. Wait for match...      1. Check receive queue
+                             2. Find match
+                             3. Remove receive request
+                             4. Return success
+   5. Still waiting...       (Done)
+   ```
+
+The core issue was that the matching process would remove a request from its queue before confirming that both sides of the match were ready to complete. This could leave one side perpetually waiting for a match that was already consumed.
+
+### Two-Phase Matching Solution
+
+To fix this race condition, we implemented an updated matching protocol:
+
+1. **Improved Queue Management**
+   - The matching algorithm maintains precise control over queue state
+   - Synchronized request removal to prevent race conditions
+   - Improved notification system for match events
+
+2. **Atomic Operations**
+   - Uses atomic operations to prevent multiple simultaneous matches
+   - Carefully orchestrated state management
+   - Clear notification to both parties  
+
+This approach ensures that:
+- No request is removed until both sides are ready
+- No request can be matched multiple times
+- System remains consistent even under high concurrency
+
+### Implementation Details
+
+The matching solution uses:
+- Atomic queue operations
+- Synchronized request processing
+- Strong ordering guarantees
+- Timeout mechanism for incomplete matches
+- Rollback procedure for failed matches
+
+### Error Handling
+
+The matching protocol gracefully handles several edge cases:
+- Timeouts during the matching process
+- Concurrent matching attempts 
+- System failures during any phase
+- Race conditions with multiple clients
+
+This robust approach ensures that the matching service maintains consistency even under high load and concurrent operations.
+
 ## Future Enhancements
 
 Potential improvements to the matching algorithm:

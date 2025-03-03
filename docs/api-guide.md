@@ -86,13 +86,13 @@ POST /bump/send
 
 ```json
 {
-  "matchingData": {
+  "matching_data": {
     "timestamp": 1647529842000,
     "location": {
       "lat": 37.7749,
       "long": -122.4194
     },
-    "customKey": "optional-secret-key"
+    "custom_key": "optional-secret-key"
   },
   "payload": "The data you want to transfer",
   "ttl": 10000
@@ -103,12 +103,12 @@ POST /bump/send
 
 | Field | Description |
 |-------|-------------|
-| `matchingData` | Parameters used to match with nearby receivers |
+| `matching_data` | Parameters used to match with nearby receivers |
 | └─ `timestamp` | Current time in milliseconds (use `Date.now()` in JavaScript) |
 | └─ `location` | Geographic coordinates (optional but recommended) |
 | └─└─ `lat` | Latitude between -90 and 90 |
 | └─└─ `long` | Longitude between -180 and 180 |
-| └─ `customKey` | Secret key to ensure you match with the right person (optional) |
+| └─ `custom_key` | Secret key to ensure you match with the right person (optional) |
 | `payload` | The data to send (string, can be text, URL, JSON string, etc.) |
 | `ttl` | Time to live in milliseconds (how long to wait for a match) |
 
@@ -161,13 +161,13 @@ POST /bump/receive
 
 ```json
 {
-  "matchingData": {
+  "matching_data": {
     "timestamp": 1647529842000,
     "location": {
       "lat": 37.7749,
       "long": -122.4194
     },
-    "customKey": "optional-secret-key"
+    "custom_key": "optional-secret-key"
   },
   "ttl": 10000
 }
@@ -182,7 +182,7 @@ POST /bump/receive
 | └─ `location` | Geographic coordinates (optional but recommended) |
 | └─└─ `lat` | Latitude between -90 and 90 |
 | └─└─ `long` | Longitude between -180 and 180 |
-| └─ `customKey` | Secret key to ensure you match with the right person (optional) |
+| └─ `custom_key` | Secret key to ensure you match with the right person (optional) |
 | `ttl` | Time to live in milliseconds (how long to wait for a match) |
 
 ### Sample Response (Success)
@@ -232,13 +232,13 @@ navigator.geolocation.getCurrentPosition(async (position) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      matchingData: {
+      matching_data: {
         timestamp: Date.now(),
         location: {
           lat: position.coords.latitude,
           long: position.coords.longitude
         },
-        customKey: "my-secret-key-123"
+        custom_key: "my-secret-key-123"
       },
       payload: "Hello from sender!",
       ttl: 10000 // Wait up to 10 seconds for a match
@@ -253,13 +253,13 @@ navigator.geolocation.getCurrentPosition(async (position) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      matchingData: {
+      matching_data: {
         timestamp: Date.now(),
         location: {
           lat: position.coords.latitude,
           long: position.coords.longitude
         },
-        customKey: "my-secret-key-123"
+        custom_key: "my-secret-key-123"
       },
       ttl: 10000 // Wait up to 10 seconds for a match
     })
