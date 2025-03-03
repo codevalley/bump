@@ -49,7 +49,7 @@ async fn main() -> std::io::Result<()> {
     
     // Initialize the matching service with configuration
     // Wrapped in Arc for thread-safe sharing
-    let service = web::Data::new(MatchingService::new(Some(config)));
+    let service = Arc::new(MatchingService::new(Some(config)));
 
     // Configure and start the HTTP server
     // Get port from environment variable or use default
@@ -58,11 +58,16 @@ async fn main() -> std::io::Result<()> {
         .parse::<u16>()
         .expect("PORT environment variable must be a valid port number");
     
+    // Properly wrap the service for Actix
+    let service_data = web::Data::new(service);
+    
     log::info!("Starting server on port {}", port);
+    log::info!("Service initialized successfully!");
 
     HttpServer::new(move || {
         App::new()
-            .app_data(service.clone())  // Share service state across workers
+            // Make service data optional but available
+            .app_data(service_data.clone())  // Share service state across workers
             .service(
                 web::scope("/bump")     // All endpoints under /bump prefix
                     .service(api::send)    // POST /bump/send

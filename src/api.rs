@@ -22,8 +22,19 @@ use std::sync::Arc;
 #[post("/send")]
 pub async fn send(
     request: web::Json<SendRequest>,
-    service: web::Data<Arc<MatchingService>>,
+    service: Option<web::Data<Arc<MatchingService>>>,
 ) -> impl Responder {
+    // First check if service is available
+    if service.is_none() {
+        log::error!("MatchingService not available in send endpoint");
+        return HttpResponse::InternalServerError().json(serde_json::json!({
+            "status": "error",
+            "message": "Service dependency not available"
+        }));
+    }
+    
+    // Service is available, proceed with request
+    let service = service.unwrap();
     match service.process_send(request.into_inner()).await {
         Ok(response) => HttpResponse::Ok().json(response),
         Err(e) => e.error_response(),
@@ -49,8 +60,19 @@ pub async fn send(
 #[post("/receive")]
 pub async fn receive(
     request: web::Json<ReceiveRequest>,
-    service: web::Data<Arc<MatchingService>>,
+    service: Option<web::Data<Arc<MatchingService>>>,
 ) -> impl Responder {
+    // First check if service is available
+    if service.is_none() {
+        log::error!("MatchingService not available in receive endpoint");
+        return HttpResponse::InternalServerError().json(serde_json::json!({
+            "status": "error",
+            "message": "Service dependency not available"
+        }));
+    }
+    
+    // Service is available, proceed with request
+    let service = service.unwrap();
     match service.process_receive(request.into_inner()).await {
         Ok(response) => HttpResponse::Ok().json(response),
         Err(e) => e.error_response(),
@@ -69,7 +91,21 @@ pub async fn receive(
 /// # Returns
 /// - 200 OK with health status JSON
 #[get("/health")]
-pub async fn health(service: web::Data<Arc<MatchingService>>) -> impl Responder {
+pub async fn health(service: Option<web::Data<Arc<MatchingService>>>) -> impl Responder {
+    // First check if service is available at all
+    if service.is_none() {
+        log::error!("MatchingService not available in health endpoint");
+        return HttpResponse::InternalServerError().json(serde_json::json!({
+            "status": "error",
+            "version": env!("CARGO_PKG_VERSION"),
+            "message": "Service dependency not available",
+            "error": "Service data was not properly injected"
+        }));
+    }
+    
+    // Service is available but might still fail
+    let service = service.unwrap();
+    
     // Try to get health status, with error handling
     let health_status = match service.get_health_status() {
         Ok(status) => status,
