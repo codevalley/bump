@@ -359,18 +359,25 @@ impl MatchingService {
     }
     
     /// Get health status information for the service
-    pub fn get_health_status(&self) -> HealthStatus {
+    pub fn get_health_status(&self) -> Result<HealthStatus, String> {
         // Current version from Cargo.toml
         let version = env!("CARGO_PKG_VERSION");
         
-        // Calculate uptime
+        // Calculate uptime - this should always work
         let uptime_seconds = self.start_time.elapsed().as_secs();
         
-        // Get queue sizes
-        let send_queue_size = self.send_queue.size();
-        let receive_queue_size = self.receive_queue.size();
+        // Get queue sizes - could potentially fail if locks are poisoned
+        let send_queue_size = match self.send_queue.size_safe() {
+            Ok(size) => size,
+            Err(e) => return Err(format!("Failed to get send queue size: {:?}", e)),
+        };
         
-        // Get match and expired counts
+        let receive_queue_size = match self.receive_queue.size_safe() {
+            Ok(size) => size,
+            Err(e) => return Err(format!("Failed to get receive queue size: {:?}", e)),
+        };
+        
+        // Get match and expired counts - atomic operations should be safe
         let matches_count = self.matches_count.load(Ordering::Relaxed);
         let expired_count = self.expired_count.load(Ordering::Relaxed);
         
@@ -383,13 +390,24 @@ impl MatchingService {
         
         // Additional system metrics
         let mut metrics = HashMap::new();
-        metrics.insert("send_queue_capacity".to_string(), self.send_queue.capacity() as u64);
-        metrics.insert("receive_queue_capacity".to_string(), self.receive_queue.capacity() as u64);
+        
+        // Safely get capacities
+        match self.send_queue.capacity_safe() {
+            Ok(capacity) => { metrics.insert("send_queue_capacity".to_string(), capacity as u64); },
+            Err(_) => { metrics.insert("send_queue_capacity".to_string(), 0); },
+        }
+        
+        match self.receive_queue.capacity_safe() {
+            Ok(capacity) => { metrics.insert("receive_queue_capacity".to_string(), capacity as u64); },
+            Err(_) => { metrics.insert("receive_queue_capacity".to_string(), 0); },
+        }
+        
+        // These should always be available from the config
         metrics.insert("cleanup_interval_ms".to_string(), self.config.cleanup_interval_ms);
         metrics.insert("max_time_diff_ms".to_string(), self.config.max_time_diff_ms as u64);
         metrics.insert("max_distance_meters".to_string(), self.config.max_distance_meters as u64);
         
-        HealthStatus {
+        Ok(HealthStatus {
             status: "ok".to_string(),
             version: version.to_string(),
             uptime_seconds,
@@ -401,6 +419,6 @@ impl MatchingService {
                 expired_count,
                 match_rate,
             },
-        }
+        })
     }
 }

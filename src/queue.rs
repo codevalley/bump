@@ -64,6 +64,12 @@ pub trait RequestQueue: Send + Sync + 'static {
     
     /// Get the maximum size of the queue
     fn capacity(&self) -> usize;
+    
+    /// Get the current size of the queue with error handling
+    fn size_safe(&self) -> Result<usize, String>;
+    
+    /// Get the maximum size of the queue with error handling
+    fn capacity_safe(&self) -> Result<usize, String>;
 }
 
 /// In-memory implementation of RequestQueue using channels for notifications.
@@ -372,5 +378,16 @@ impl RequestQueue for MemoryQueue {
     
     fn capacity(&self) -> usize {
         self.max_size
+    }
+    
+    fn size_safe(&self) -> Result<usize, String> {
+        match self.requests.try_read() {
+            Some(requests) => Ok(requests.len()),
+            None => Err("Failed to acquire read lock for queue size check".to_string()),
+        }
+    }
+    
+    fn capacity_safe(&self) -> Result<usize, String> {
+        Ok(self.max_size)
     }
 }

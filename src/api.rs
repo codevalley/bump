@@ -70,13 +70,35 @@ pub async fn receive(
 /// - 200 OK with health status JSON
 #[get("/health")]
 pub async fn health(service: web::Data<Arc<MatchingService>>) -> impl Responder {
-    let health_status = service.get_health_status();
+    // Try to get health status, with error handling
+    let health_status = match service.get_health_status() {
+        Ok(status) => status,
+        Err(e) => {
+            // Log the error
+            log::error!("Failed to get health status: {:?}", e);
+            
+            // Return a degraded status
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "status": "degraded",
+                "version": env!("CARGO_PKG_VERSION"),
+                "message": "Error retrieving health data",
+                "error": format!("{:?}", e)
+            }));
+        }
+    };
+    
     HttpResponse::Ok().json(health_status)
 }
 
 // Root-level health endpoint for platform health checks
+// This version doesn't rely on MatchingService to work
 #[get("/")]
-pub async fn root_health(service: web::Data<Arc<MatchingService>>) -> impl Responder {
-    let health_status = service.get_health_status();
-    HttpResponse::Ok().json(health_status)
+pub async fn root_health() -> impl Responder {
+    // Simple response with minimal information
+    let simple_health = serde_json::json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "message": "Bump service is running"
+    });
+    HttpResponse::Ok().json(simple_health)
 }
