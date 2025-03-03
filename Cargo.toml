@@ -1,0 +1,22 @@
+[package]
+name = "bump"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A fast and lightweight proximity-based data exchange service"
+
+[dependencies]
+actix-web = "4.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.34", features = ["full"] }
+log = "0.4"
+env_logger = "0.10"
+thiserror = "1.0"
+geo = "0.26"      # For location calculations
+time = "0.3"      # For timestamp handling
+parking_lot = "0.12" # More efficient than std::sync for our use case
+uuid = { version = "1.6", features = ["v4"] } # For request ID generation
+envy = "0.4"       # For environment variable parsing
+dotenv = "0.15"    # For .env file support
+async-trait = "0.1"  # For async traits
