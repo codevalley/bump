@@ -1,22 +1,30 @@
-# Build stage
-FROM rust:1.77-slim as builder
+# Simple, clean Dockerfile using the latest Rust version
+FROM rust:1.85 as builder
 
-WORKDIR /usr/src/bump
+WORKDIR /app
 COPY . .
 
-# Build the application
-RUN cargo build --release
+# Build with the latest stable Rust
+RUN rustup update stable && \
+    cargo build --release
 
 # Runtime stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
-# Install necessary runtime dependencies
+# Install only necessary runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
+# Copy health check script
+COPY healthcheck.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Define health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD ["/usr/local/bin/healthcheck.sh"]
+
 # Copy the binary from builder
-COPY --from=builder /usr/src/bump/target/release/bump /usr/local/bin/
+COPY --from=builder /app/target/release/bump /usr/local/bin/bump
 
 # Set environment variables
 ENV RUST_LOG=info

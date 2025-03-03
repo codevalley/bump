@@ -90,56 +90,36 @@ docker build -t bump .
 docker run -p 8080:8080 bump
 ```
 
-### Deployment Options
+### Deployment
 
-#### Option 1: Railway (Docker-based)
-You can deploy to [Railway](https://railway.app/) using the provided Dockerfile:
+You can deploy Bump to any platform that supports Docker:
 
+#### Deploy to Any PaaS (Railway, Render, Heroku, etc.)
 1. Fork this repository to your GitHub account
-2. Create a new project on Railway and connect it to your GitHub repository
-3. Railway will automatically detect the `Dockerfile.railway` using the `railway.toml` configuration
-4. The service will be deployed with health check settings
-5. Access your service at the URL provided by Railway
+2. Create a new project on your chosen platform 
+3. Connect it to your GitHub repository
+4. The platform will automatically detect the Dockerfile
+5. The service will be deployed with health check at the `/` endpoint
+6. Access your service at the URL provided by the platform
 
-#### Option 2: Linux VM or Droplet (Recommended)
-For greater control and reliability, deploy directly to a Linux server:
+#### Deploy to a VPS/VM
 
-1. Build the application locally: `cargo build --release`
-2. Transfer the binary to your server: 
+For more control, deploy to a Linux server:
+
+1. Install Docker on your server
+2. Clone the repository: `git clone https://github.com/yourusername/bump.git`
+3. Build and run with Docker:
    ```bash
-   scp target/release/bump user@your-server:/path/to/app/
-   ```
-3. Set up a systemd service:
-   ```bash
-   # /etc/systemd/system/bump.service
-   [Unit]
-   Description=Bump proximity data exchange service
-   After=network.target
-   
-   [Service]
-   User=bump
-   WorkingDirectory=/path/to/app
-   ExecStart=/path/to/app/bump
-   Restart=on-failure
-   
-   [Install]
-   WantedBy=multi-user.target
-   ```
-4. Enable and start the service:
-   ```bash
-   sudo systemctl enable bump
-   sudo systemctl start bump
+   cd bump
+   docker build -t bump .
+   docker run -d -p 8080:8080 --name bump-service bump
    ```
 
-#### Option 3: Fly.io (Alternative PaaS)
-Fly.io typically has better Rust support:
-
-1. Install the Fly CLI: `curl -L https://fly.io/install.sh | sh`
-2. Authenticate: `fly auth login`
-3. Create a new app: `fly launch`
-4. Deploy: `fly deploy`
-
-See the [Fly.io Rust documentation](https://fly.io/docs/languages-and-frameworks/rust/) for details.
+4. Or, build natively:
+   ```bash
+   cargo build --release
+   ./target/release/bump
+   ```
 
 ## 📚 API Documentation
 
