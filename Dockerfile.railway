@@ -1,11 +1,20 @@
 # Use a newer Rust version to avoid compatibility issues
-FROM --platform=linux/amd64 rust:1.77-bullseye as builder
+# We specifically use Rust 1.77 and force removal of any existing lock file
+FROM rust:1.77-bullseye as builder
 
 WORKDIR /usr/src/bump
 COPY . .
 
-# Install required dependencies
-RUN apt-get update && \
+# Force Rust version
+RUN rustup install 1.77 && \
+    rustup default 1.77 && \
+    # Verify Rust version
+    rustc --version && \
+    cargo --version && \
+    # Remove potentially incompatible lock file
+    rm -f Cargo.lock && \
+    # Install any required dependencies
+    apt-get update && \
     apt-get install -y pkg-config libssl-dev
 
 # Build with the latest Rust version

@@ -1,6 +1,15 @@
+# Railway build configuration
+
+# Use the Railway Dockerfile to build with the newest Rust version
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.railway"
+
+# Alternative option for pre-built binary with minimal container
+# Uncomment the next 3 lines and comment out the above if needed
+# [build]
+# builder = "DOCKERFILE"
+# dockerfilePath = "Dockerfile.minimal"
 
 [deploy]
 healthcheckPath = "/"
