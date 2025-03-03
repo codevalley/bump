@@ -2,7 +2,7 @@
 //! Sets up the HTTP server, configures logging, and initializes the service with
 //! environment-based configuration.
 
-use actix_web::{web, App, HttpServer, HttpResponse}; 
+use actix_web::{web, App, HttpServer}; 
 use env_logger;
 use log;
 
@@ -69,12 +69,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::receive) // POST /bump/receive
                     .service(api::health)  // GET /bump/health
             )
-            // Add a root health check that redirects to /bump/health
-            .route("/health", web::get().to(|| async {
-                HttpResponse::TemporaryRedirect()
-                    .append_header(("Location", "/bump/health"))
-                    .finish()
-            }))
+            // Register root-level health endpoint for platform health checks
+            .service(api::root_health)
     })
     .bind(("0.0.0.0", port))?  // Bind to all interfaces with dynamic port
     .run()                     // Start the server

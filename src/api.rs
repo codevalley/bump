@@ -73,3 +73,10 @@ pub async fn health(service: web::Data<Arc<MatchingService>>) -> impl Responder 
     let health_status = service.get_health_status();
     HttpResponse::Ok().json(health_status)
 }
+
+// Root-level health endpoint for platform health checks
+#[get("/")]
+pub async fn root_health(service: web::Data<Arc<MatchingService>>) -> impl Responder {
+    let health_status = service.get_health_status();
+    HttpResponse::Ok().json(health_status)
+}
