@@ -58,6 +58,12 @@ pub trait RequestQueue: Send + Sync + 'static {
     
     /// Clean up expired requests
     async fn cleanup_expired(&self) -> Result<(), BumpError>;
+    
+    /// Get the current size of the queue
+    fn size(&self) -> usize;
+    
+    /// Get the maximum size of the queue
+    fn capacity(&self) -> usize;
 }
 
 /// In-memory implementation of RequestQueue using channels for notifications.
@@ -357,5 +363,14 @@ impl RequestQueue for MemoryQueue {
         }
         
         Ok(())
+    }
+    
+    fn size(&self) -> usize {
+        let requests = self.requests.read();
+        requests.len()
+    }
+    
+    fn capacity(&self) -> usize {
+        self.max_size
     }
 }

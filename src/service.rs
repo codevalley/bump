@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::time::Instant;
+use std::collections::HashMap;
 use time::{OffsetDateTime, Duration};
 use tokio::sync::broadcast;
 use tokio::time::timeout;
-use crate::models::{SendRequest, ReceiveRequest, MatchResponse, MatchStatus, Location, MatchingData};
+use crate::models::{SendRequest, ReceiveRequest, MatchResponse, MatchStatus, Location, MatchingData, HealthStatus, QueueStats};
 use crate::error::BumpError;
 use crate::config::MatchingConfig;
 use crate::queue::{QueuedRequest, MemoryQueue, RequestEvent, RequestEventType, RequestQueue};
@@ -18,6 +20,12 @@ pub struct MatchingService {
     receive_queue: Arc<MemoryQueue>,
     /// Configuration for matching algorithm and service behavior
     config: MatchingConfig,
+    /// Service start time for calculating uptime
+    start_time: Arc<Instant>,
+    /// Counter for successful matches
+    matches_count: Arc<AtomicU64>,
+    /// Counter for expired requests
+    expired_count: Arc<AtomicU64>, 
 }
 
 impl MatchingService {
@@ -27,12 +35,79 @@ impl MatchingService {
             send_queue: Arc::new(MemoryQueue::new(100, config.max_queue_size)), // Buffer size of 100 events
             receive_queue: Arc::new(MemoryQueue::new(100, config.max_queue_size)),
             config,
+            start_time: Arc::new(Instant::now()),
+            matches_count: Arc::new(AtomicU64::new(0)),
+            expired_count: Arc::new(AtomicU64::new(0)),
         };
         
         // Start cleanup task
         service.start_cleanup_task();
         
+        // Start metric collection for events
+        service.start_metrics_collection();
+        
         service
+    }
+    
+    /// Sets up monitors for queue events to collect metrics
+    fn start_metrics_collection(&self) {
+        // Monitor send queue events
+        let send_events = self.send_queue.subscribe();
+        let matches_count = self.matches_count.clone();
+        let expired_count = self.expired_count.clone();
+        
+        tokio::spawn(async move {
+            let mut rx = send_events;
+            loop {
+                match rx.recv().await {
+                    Ok(event) => {
+                        match event.event_type {
+                            RequestEventType::Matched(_) => {
+                                matches_count.fetch_add(1, Ordering::Relaxed);
+                            },
+                            RequestEventType::Expired => {
+                                expired_count.fetch_add(1, Ordering::Relaxed);
+                            },
+                            _ => {}
+                        }
+                    },
+                    Err(e) => {
+                        if let broadcast::error::RecvError::Closed = e {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Monitor receive queue events
+        let receive_events = self.receive_queue.subscribe();
+        let matches_count = self.matches_count.clone();
+        let expired_count = self.expired_count.clone();
+        
+        tokio::spawn(async move {
+            let mut rx = receive_events;
+            loop {
+                match rx.recv().await {
+                    Ok(event) => {
+                        match event.event_type {
+                            RequestEventType::Matched(_) => {
+                                matches_count.fetch_add(1, Ordering::Relaxed);
+                            },
+                            RequestEventType::Expired => {
+                                expired_count.fetch_add(1, Ordering::Relaxed);
+                            },
+                            _ => {}
+                        }
+                    },
+                    Err(e) => {
+                        if let broadcast::error::RecvError::Closed = e {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     fn start_cleanup_task(&self) {
@@ -282,5 +357,50 @@ impl MatchingService {
 
         Ok(())
     }
-
+    
+    /// Get health status information for the service
+    pub fn get_health_status(&self) -> HealthStatus {
+        // Current version from Cargo.toml
+        let version = env!("CARGO_PKG_VERSION");
+        
+        // Calculate uptime
+        let uptime_seconds = self.start_time.elapsed().as_secs();
+        
+        // Get queue sizes
+        let send_queue_size = self.send_queue.size();
+        let receive_queue_size = self.receive_queue.size();
+        
+        // Get match and expired counts
+        let matches_count = self.matches_count.load(Ordering::Relaxed);
+        let expired_count = self.expired_count.load(Ordering::Relaxed);
+        
+        // Calculate match rate (matches per second)
+        let match_rate = if uptime_seconds > 0 {
+            matches_count as f64 / uptime_seconds as f64
+        } else {
+            0.0
+        };
+        
+        // Additional system metrics
+        let mut metrics = HashMap::new();
+        metrics.insert("send_queue_capacity".to_string(), self.send_queue.capacity() as u64);
+        metrics.insert("receive_queue_capacity".to_string(), self.receive_queue.capacity() as u64);
+        metrics.insert("cleanup_interval_ms".to_string(), self.config.cleanup_interval_ms);
+        metrics.insert("max_time_diff_ms".to_string(), self.config.max_time_diff_ms as u64);
+        metrics.insert("max_distance_meters".to_string(), self.config.max_distance_meters as u64);
+        
+        HealthStatus {
+            status: "ok".to_string(),
+            version: version.to_string(),
+            uptime_seconds,
+            metrics,
+            queue_stats: QueueStats {
+                send_queue_size,
+                receive_queue_size,
+                matches_count,
+                expired_count,
+                match_rate,
+            },
+        }
+    }
 }

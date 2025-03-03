@@ -3,6 +3,7 @@
 //! and matching logic.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 
 /// Geographic location represented by latitude and longitude.
@@ -86,4 +87,34 @@ pub enum MatchStatus {
 /// After this duration, unmatched requests are removed from the queue.
 fn default_ttl() -> u32 {
     500 // Default TTL of 500ms
+}
+
+/// Health status response for monitoring the Bump service.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthStatus {
+    /// Overall service health status
+    pub status: String,
+    /// Current version of the service
+    pub version: String,
+    /// When the service was started
+    pub uptime_seconds: u64,
+    /// System metrics
+    pub metrics: HashMap<String, u64>,
+    /// Queue statistics
+    pub queue_stats: QueueStats,
+}
+
+/// Statistics about the request queues.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueStats {
+    /// Number of send requests currently in queue
+    pub send_queue_size: usize,
+    /// Number of receive requests currently in queue
+    pub receive_queue_size: usize,
+    /// Number of matches made since startup
+    pub matches_count: u64,
+    /// Number of expired requests since startup
+    pub expired_count: u64,
+    /// Current match rate (matches per second)
+    pub match_rate: f64,
 }

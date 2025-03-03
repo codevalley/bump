@@ -59,9 +59,10 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/bump")     // All endpoints under /bump prefix
                     .service(api::send)    // POST /bump/send
                     .service(api::receive) // POST /bump/receive
+                    .service(api::health)  // GET /bump/health
             )
     })
-    .bind(("127.0.0.1", 8080))?  // Bind to localhost:8080
+    .bind(("0.0.0.0", 8080))?  // Bind to all interfaces:8080
     .run()                        // Start the server
     .await
 }

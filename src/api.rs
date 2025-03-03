@@ -2,7 +2,7 @@
 //! Provides HTTP endpoints for sending and receiving data between devices.
 //! All endpoints use JSON for request/response bodies and follow RESTful principles.
 
-use actix_web::{post, web, HttpResponse, Responder, ResponseError};
+use actix_web::{post, get, web, HttpResponse, Responder, ResponseError};
 use crate::models::{SendRequest, ReceiveRequest};
 use crate::service::MatchingService;
 use std::sync::Arc;
@@ -55,4 +55,21 @@ pub async fn receive(
         Ok(response) => HttpResponse::Ok().json(response),
         Err(e) => e.error_response(),
     }
+}
+
+/// Health check endpoint for monitoring service status.
+///
+/// Returns various metrics and status information for the service:
+/// - Service status (ok, degraded, error)
+/// - Version information
+/// - Uptime
+/// - Queue sizes and capacities
+/// - Matching statistics
+///
+/// # Returns
+/// - 200 OK with health status JSON
+#[get("/health")]
+pub async fn health(service: web::Data<Arc<MatchingService>>) -> impl Responder {
+    let health_status = service.get_health_status();
+    HttpResponse::Ok().json(health_status)
 }
