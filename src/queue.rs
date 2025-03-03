@@ -135,31 +135,16 @@ impl MemoryQueue {
     }
     
     pub fn calculate_match_score(req1: &QueuedRequest, req2: &QueuedRequest) -> Option<i32> {
-        // Debug matching
-        println!("Matching:\n  req1: id={}, payload={:?}, custom_key={:?}\n  req2: id={}, payload={:?}, custom_key={:?}",
-            req1.id, req1.payload, req1.matching_data.custom_key,
-            req2.id, req2.payload, req2.matching_data.custom_key);
-            
         // Don't match requests with same ID
         if req1.id == req2.id {
-            println!("  No match - Same ID");
             return None;
         }
         
         // Don't match if both have payloads (both are send requests)
         // or neither have payloads (both are receive requests)
         match (req1.payload.is_some(), req2.payload.is_some()) {
-            (true, true) => {
-                println!("  No match - Both have payloads (both send requests)");
-                return None;
-            },
-            (false, false) => {
-                println!("  No match - Neither have payloads (both receive requests)");
-                return None;
-            },
-            _ => {
-                println!("  Payload check passed (one send, one receive)");
-            }
+            (true, true) | (false, false) => return None,
+            _ => {}
         }
         
         let mut score = 0;
@@ -174,13 +159,13 @@ impl MemoryQueue {
         let max_time_diff = Self::get_config_max_time_diff_ms();
         
         if time_diff > max_time_diff {
-            println!("  No match - Time difference too large: {}ms (max: {}ms)", time_diff, max_time_diff);
+            // Time difference too large
             return None;
         } else {
             // Calculate time proximity score (0-100)
             // 0 diff = 100 points, max_diff = 0 points, linear scale in between
             let time_score = 100 - ((time_diff as f64 / max_time_diff as f64) * 100.0) as i32;
-            println!("  Time check passed: diff={}ms, score={}", time_diff, time_score);
+            // Time check passed
             score += time_score;
         }
         
@@ -215,7 +200,7 @@ impl MemoryQueue {
                 score += distance_score;
                 has_secondary_match = true;
             } else {
-                println!("  Location too far: {:.2}m (max: {:.2}m)", distance, max_distance);
+                // Location too far
             }
         }
         
@@ -226,21 +211,21 @@ impl MemoryQueue {
             &req2.matching_data.custom_key
         ) {
             if k1 == k2 {
-                println!("  Custom key match: {}", k1);
+                // Custom key match
                 has_secondary_match = true;
                 // Custom key matching is a strong signal - give it a high score
                 score += 200;
             } else {
                 // If custom keys are provided but don't match, this is a strong
                 // negative signal - we should never match these requests
-                println!("  Custom keys don't match: {} vs {}", k1, k2);
+                // Custom keys don't match
                 return None;
             }
         } else if req1.matching_data.custom_key.is_some() || req2.matching_data.custom_key.is_some() {
             // If only one side has a custom key, no penalty but no boost either
-            println!("  Only one request has a custom key");
+            // Only one request has a custom key
         } else {
-            println!("  No custom keys specified");
+            // No custom keys specified
         }
         
         // Determine if we have a valid match based on combined criteria
@@ -259,10 +244,10 @@ impl MemoryQueue {
         };
         
         if score >= threshold {
-            println!("  Match found with score {} (threshold: {})", score, threshold);
+            // Match found
             Some(score)
         } else {
-            println!("  Score {} below threshold {}", score, threshold);
+            // Score below threshold
             None
         }
     }
@@ -284,25 +269,23 @@ impl RequestQueue for MemoryQueue {
     /// - Err(BumpError::QueueFull) if queue is at capacity
     async fn add_request(&self, request: QueuedRequest) -> Result<(), BumpError> {
         let mut requests = self.requests.write();
-        println!("Adding request: id={} to queue (current size: {})", request.id, requests.len());
         
         // Step 1: Check if queue is full BEFORE adding
         if requests.len() >= self.max_size {
-            println!("Queue is full, rejecting request");
+            // Queue is full
             return Err(BumpError::QueueFull);
         }
         
         // Step 2: Add request to storage
         requests.insert(request.id.clone(), request.clone());
-        println!("Added request. New queue size: {}", requests.len());
         
         // Step 3: Notify all subscribers about the new request
         match self.event_tx.send(RequestEvent {
             request: request.clone(),
             event_type: RequestEventType::Added,
         }) {
-            Ok(n) => println!("Notified {} subscribers about new request", n),
-            Err(e) => println!("Failed to notify subscribers: {}", e),
+            Ok(_) => {},
+            Err(_) => {},
         }
         
         Ok(())
@@ -324,14 +307,7 @@ impl RequestQueue for MemoryQueue {
         let mut requests = self.requests.write();
         let now = OffsetDateTime::now_utc();
         
-        println!("Finding match for request: id={}", request.id);
-        println!("Current queue size: {}", requests.len());
-        
-        // Debug print all requests in the queue
-        for (id, r) in requests.iter() {
-            println!("Queue entry: id={}, payload={:?}, timestamp={}, expires={}, expired={}",
-                id, r.payload, r.matching_data.timestamp, r.expires_at, r.expires_at <= now);
-        }
+
         
         let best_match = requests.iter()
             .filter(|(_, r)| r.expires_at > now)
@@ -341,13 +317,19 @@ impl RequestQueue for MemoryQueue {
             })
             .max_by_key(|(_, _, score)| *score);
             
-        if let Some((id, matched_req, score)) = best_match {
-            println!("Found match: id={}, score={}", id, score);
+        if let Some((id, matched_req, _score)) = best_match {
+            // Found match
             // Remove the matched request from the queue
             requests.remove(&id);
+            
+            // Notify subscribers about the match
+            let _ = self.event_tx.send(RequestEvent {
+                request: matched_req.clone(),
+                event_type: RequestEventType::Matched(id),
+            });
             Ok(Some(matched_req))
         } else {
-            println!("No match found");
+            // No match found
             Ok(None)
         }
     }
