@@ -1,7 +1,7 @@
 # Generated files
 /target
 **/*.rs.bk
-Cargo.lock
+# Don't ignore Cargo.lock as we need it for reproducible builds
 
 # Local development
 .git

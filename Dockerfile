@@ -4,11 +4,11 @@ FROM rust:1.70-slim as builder
 WORKDIR /usr/src/bump
 COPY . .
 
-# All dependencies are now pinned in Cargo.toml
-# No need for the complex resolution script
+# Use the pre-generated Cargo.lock to ensure exact dependency versions
+# This is crucial for ensuring compatibility with Rust 1.70
 
-# Build the application
-RUN cargo build --release
+# Build with --locked flag to strictly use versions from Cargo.lock
+RUN cargo build --release --locked
 
 # Runtime stage
 FROM debian:bullseye-slim

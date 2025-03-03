@@ -8,10 +8,11 @@ COPY . .
 RUN apt-get update && \
     apt-get install -y pkg-config libssl-dev
 
-# All dependencies are now pinned in Cargo.toml for Rust 1.70 compatibility
+# Use the pre-generated Cargo.lock to ensure exact dependency versions
+# This is crucial for ensuring compatibility with Rust 1.70
 
-# Build the application
-RUN cargo build --release
+# Build with --locked flag to strictly use versions from Cargo.lock
+RUN cargo build --release --locked
 
 # Runtime stage - keep it minimal
 FROM --platform=linux/amd64 debian:bullseye-slim
