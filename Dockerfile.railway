@@ -8,10 +8,7 @@ COPY . .
 RUN apt-get update && \
     apt-get install -y pkg-config libssl-dev
 
-# Intentionally pin dependencies to versions known to work with Rust 1.70
-# We update Cargo.toml directly to force compatible versions
-RUN sed -i 's/geo = "0.26"/geo = "=0.24.1"/' Cargo.toml && \
-    sed -i 's/time = "0.3"/time = "=0.3.20"/' Cargo.toml 
+# All dependencies are now pinned in Cargo.toml for Rust 1.70 compatibility
 
 # Build the application
 RUN cargo build --release
