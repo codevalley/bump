@@ -4,11 +4,16 @@ FROM rust:1.70-slim as builder
 WORKDIR /usr/src/bump
 COPY . .
 
-# Use the pre-generated Cargo.lock to ensure exact dependency versions
-# This is crucial for ensuring compatibility with Rust 1.70
-
-# Build with --locked flag to strictly use versions from Cargo.lock
-RUN cargo build --release --locked
+# We need to regenerate Cargo.lock for Rust 1.70 as the version format might be different
+# Delete any existing Cargo.lock and generate a fresh one
+RUN rm -f Cargo.lock && \
+    # First update specific problematic dependencies
+    cargo update -p bytestring@1.4.0 --precise 1.3.0 && \
+    cargo update -p geo-types@0.7.15 --precise 0.7.11 && \
+    # Generate a lock file compatible with this Rust version
+    cargo generate-lockfile && \
+    # Now build with the fresh lockfile
+    cargo build --release --locked
 
 # Runtime stage
 FROM debian:bullseye-slim
