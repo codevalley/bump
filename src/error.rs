@@ -4,6 +4,8 @@
 
 use thiserror::Error;
 use actix_web::{HttpResponse, ResponseError};
+use serde_json::json;
+use log;
 
 /// Errors that can occur during request processing.
 /// Each variant maps to a specific HTTP status code and includes
@@ -22,6 +24,7 @@ pub enum BumpError {
     /// Returned for unexpected internal errors (500 Internal Server Error)
     /// Contains internal error details (logged but not sent to client)
     #[error("Internal server error: {0}")]
+    #[allow(dead_code)]
     Internal(String),
 
     /// Returned when request queue is at capacity (429 Too Many Requests)

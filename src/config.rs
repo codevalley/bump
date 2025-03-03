@@ -84,8 +84,23 @@ impl MatchingConfig {
 
         // Parse and validate configuration
         match envy::from_iter::<_, Self>(env_vars.into_iter()) {
-            Ok(config) => {
-                config.validate()?
+            Ok(mut config) => {
+                // Validate earth_radius_meters before setting default
+                if config.earth_radius_meters < 0.0 {
+                    return Err("earth_radius_meters must be positive".to_string());
+                }
+                // Set earth_radius_meters to default if not provided
+                if config.earth_radius_meters == 0.0 {
+                    config.earth_radius_meters = Self::default().earth_radius_meters;
+                }
+                
+                // Early validation for critical parameters
+                if config.max_distance_meters <= 0.0 {
+                    return Err("max_distance_meters must be positive".to_string());
+                }
+                
+                // Validate the rest of the config
+                config.validate()?;
                 Ok(config)
             }
             Err(e) => Err(format!("Failed to parse environment variables: {}", e)),
@@ -129,6 +144,7 @@ impl MatchingConfig {
     /// 
     /// Earth radius is set to the standard value and cannot be modified
     /// through this constructor to prevent errors in distance calculations.
+    #[allow(dead_code)]
     pub fn new(
         max_distance_meters: f64,
         max_time_diff_ms: i64,
@@ -183,6 +199,157 @@ impl MatchingConfig {
         if self.max_queue_size == 0 {
             return Err("max_queue_size must be positive".to_string());
         }
+        if self.earth_radius_meters <= 0.0 {
+            return Err("earth_radius_meters must be positive".to_string());
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    /// Helper function to clear environment variables after testing
+    fn clear_test_env_vars() {
+        env::remove_var("BUMP_MAX_DISTANCE_METERS");
+        env::remove_var("BUMP_MAX_TIME_DIFF_MS");
+        env::remove_var("BUMP_DEFAULT_TTL_MS");
+        env::remove_var("BUMP_TEMPORAL_WEIGHT");
+        env::remove_var("BUMP_SPATIAL_WEIGHT");
+        env::remove_var("BUMP_CLEANUP_INTERVAL_MS");
+        env::remove_var("BUMP_MAX_QUEUE_SIZE");
+        env::remove_var("BUMP_EARTH_RADIUS_METERS");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = MatchingConfig::default();
+        assert_eq!(config.max_distance_meters, 5.0);
+        assert_eq!(config.max_time_diff_ms, 500);
+        assert_eq!(config.default_ttl_ms, 500);
+        assert_eq!(config.temporal_weight, 0.7);
+        assert_eq!(config.spatial_weight, 0.3);
+        assert_eq!(config.cleanup_interval_ms, 1000);
+        assert_eq!(config.max_queue_size, 1000);
+    }
+
+    #[test]
+    fn test_new_config() {
+        let config = MatchingConfig::new(
+            10.0,   // max_distance_meters
+            1000,   // max_time_diff_ms
+            800,    // default_ttl_ms
+            0.6,    // temporal_weight
+            0.4,    // spatial_weight
+            2000,   // cleanup_interval_ms
+            2000,   // max_queue_size
+        );
+
+        assert_eq!(config.max_distance_meters, 10.0);
+        assert_eq!(config.max_time_diff_ms, 1000);
+        assert_eq!(config.default_ttl_ms, 800);
+        assert_eq!(config.temporal_weight, 0.6);
+        assert_eq!(config.spatial_weight, 0.4);
+        assert_eq!(config.cleanup_interval_ms, 2000);
+        assert_eq!(config.max_queue_size, 2000);
+        assert_eq!(config.earth_radius_meters, 6_371_000.0);
+    }
+
+    #[test]
+    fn test_config_validation() {
+        // Test valid configuration
+        let valid_config = MatchingConfig::default();
+        assert!(valid_config.validate().is_ok());
+
+        // Test invalid max_distance_meters
+        let mut invalid_config = MatchingConfig::default();
+        invalid_config.max_distance_meters = 0.0;
+        assert!(invalid_config.validate().is_err());
+
+        // Test invalid weights
+        let mut invalid_config = MatchingConfig::default();
+        invalid_config.temporal_weight = 0.8;
+        invalid_config.spatial_weight = 0.3;
+        assert!(invalid_config.validate().is_err());
+
+        // Test negative weights
+        let mut invalid_config = MatchingConfig::default();
+        invalid_config.temporal_weight = -0.1;
+        assert!(invalid_config.validate().is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_from_env() {
+        // First clear any existing environment variables
+        clear_test_env_vars();
+        
+        // Set our own specific test environment variables
+        env::set_var("BUMP_MAX_DISTANCE_METERS", "10.0");
+        env::set_var("BUMP_MAX_TIME_DIFF_MS", "1000");
+        env::set_var("BUMP_DEFAULT_TTL_MS", "800");
+        env::set_var("BUMP_TEMPORAL_WEIGHT", "0.6");
+        env::set_var("BUMP_SPATIAL_WEIGHT", "0.4");
+        env::set_var("BUMP_CLEANUP_INTERVAL_MS", "2000");
+        env::set_var("BUMP_MAX_QUEUE_SIZE", "2000");
+        env::set_var("BUMP_EARTH_RADIUS_METERS", "6371000.0");
+        
+        // Verify environment variable was set correctly
+        let distance_var = env::var("BUMP_MAX_DISTANCE_METERS").unwrap();
+        assert_eq!(distance_var, "10.0", "Environment variable was not set correctly");
+        
+        // Now load from environment
+        let config = match MatchingConfig::from_env() {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Failed to load config: {}", e);
+                panic!("Config failed: {}", e);
+            }
+        };
+        assert_eq!(config.max_distance_meters, 10.0);
+        assert_eq!(config.max_time_diff_ms, 1000);
+        assert_eq!(config.default_ttl_ms, 800);
+        assert_eq!(config.temporal_weight, 0.6);
+        assert_eq!(config.spatial_weight, 0.4);
+        assert_eq!(config.cleanup_interval_ms, 2000);
+        assert_eq!(config.max_queue_size, 2000);
+        assert_eq!(config.earth_radius_meters, 6371000.0);
+        clear_test_env_vars();
+
+        // Test with missing environment variables
+        let config = MatchingConfig::from_env_or_default();
+        assert_eq!(config.max_distance_meters, 5.0); // Should use default values
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_from_env_invalid_values() {
+        // Clear any existing environment variables
+        clear_test_env_vars();
+        
+        // Test with invalid environment variables that will fail validation
+        env::set_var("BUMP_MAX_DISTANCE_METERS", "-1.0");
+        env::set_var("BUMP_MAX_TIME_DIFF_MS", "1000");
+        env::set_var("BUMP_DEFAULT_TTL_MS", "800");
+        env::set_var("BUMP_TEMPORAL_WEIGHT", "0.6");
+        env::set_var("BUMP_SPATIAL_WEIGHT", "0.4");
+        env::set_var("BUMP_CLEANUP_INTERVAL_MS", "2000");
+        env::set_var("BUMP_MAX_QUEUE_SIZE", "2000");
+        env::set_var("BUMP_EARTH_RADIUS_METERS", "6371000.0");
+        
+        // Verify the environment variable is set correctly
+        let distance_var = env::var("BUMP_MAX_DISTANCE_METERS").unwrap();
+        assert_eq!(distance_var, "-1.0", "Environment variable was not set correctly");
+        
+        let config = MatchingConfig::from_env();
+        
+        // Verify the configuration failed because of the negative distance
+        assert!(config.is_err(), "Configuration validation should fail with negative distance");
+        assert!(config.unwrap_err().contains("max_distance_meters must be positive"));
+        
+        // Clean up environment variables
+        clear_test_env_vars();
     }
 }

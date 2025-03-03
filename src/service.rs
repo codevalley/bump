@@ -2,10 +2,10 @@ use std::sync::Arc;
 use time::{OffsetDateTime, Duration};
 use tokio::sync::broadcast;
 use tokio::time::timeout;
-use crate::models::{SendRequest, ReceiveRequest, MatchResponse, MatchStatus, Location};
+use crate::models::{SendRequest, ReceiveRequest, MatchResponse, MatchStatus, Location, MatchingData};
 use crate::error::BumpError;
 use crate::config::MatchingConfig;
-use crate::queue::{RequestQueue, QueuedRequest, MemoryQueue, RequestEvent, RequestEventType};
+use crate::queue::{QueuedRequest, MemoryQueue, RequestEvent, RequestEventType, RequestQueue};
 
 #[derive(Clone)]
 /// Service that handles matching of send and receive requests.
@@ -50,6 +50,7 @@ impl MatchingService {
         });
     }
 
+    #[allow(dead_code)]
     pub fn new_with_config(config: MatchingConfig) -> Self {
         Self::new(Some(config))
     }
@@ -85,7 +86,7 @@ impl MatchingService {
         
         // Step 2: Subscribe to receive queue events BEFORE checking for matches
         // This ensures we don't miss any matches that occur while we're checking
-        let mut receive_events = self.receive_queue.subscribe();
+        let receive_events = self.receive_queue.subscribe();
         
         // Check for existing matches in receive queue
         // We do this before checking queue size to maximize matching success
@@ -94,7 +95,7 @@ impl MatchingService {
                 status: MatchStatus::Matched,
                 sender_id: Some(request_id),
                 receiver_id: Some(matched_request.id),
-                timestamp: now.unix_timestamp_nanos() / 1_000_000,
+                timestamp: (now.unix_timestamp_nanos() / 1_000_000) as i64,
                 payload: Some(request.payload),
                 message: None,
             });
@@ -136,12 +137,12 @@ impl MatchingService {
             match event.event_type {
                 RequestEventType::Added => {
                     // Check if this new request matches ours
-                    if let Some(score) = MemoryQueue::calculate_match_score(our_request, &event.request) {
+                    if let Some(_) = MemoryQueue::calculate_match_score(our_request, &event.request) {
                         return Ok(MatchResponse {
                             status: MatchStatus::Matched,
                             sender_id: Some(our_request.id.clone()),
                             receiver_id: Some(event.request.id),
-                            timestamp: OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000,
+                            timestamp: (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64,
                             payload: our_request.payload.clone(),
                             message: None,
                         });
@@ -154,52 +155,7 @@ impl MatchingService {
         Err(BumpError::Timeout)
     }
 
-    fn find_best_match<'a>(
-        &self,
-        request: &SendRequest,
-        other_requests: &'a HashMap<String, PendingRequest>,
-    ) -> Option<(String, &'a PendingRequest)> {
-        let now = OffsetDateTime::now_utc();
-        
-        other_requests.iter()
-            // Filter expired requests
-            .filter(|(_, r)| r.expires_at > now)
-            // Time proximity is mandatory
-            .filter(|(_, r)| {
-                let time_diff = (r.request.matching_data.timestamp - request.matching_data.timestamp).abs();
-                time_diff <= self.config.max_time_diff_ms
-            })
-            // Score matches based on available criteria
-            .max_by_key(|(_, r)| {
-                let mut score = 0;
-                
-                // Location match (if both have location)
-                if let (Some(loc1), Some(loc2)) = (
-                    &request.matching_data.location,
-                    &r.request.matching_data.location
-                ) {
-                    let distance = self.calculate_distance(loc1, loc2);
-                    if distance <= self.config.max_distance_meters {
-                        score += 50; // Base score for location match
-                        // Additional points for closer proximity
-                        score += ((self.config.max_distance_meters - distance) * 10.0) as i32;
-                    }
-                }
-                
-                // Custom key match
-                if let (Some(k1), Some(k2)) = (
-                    &request.matching_data.custom_key,
-                    &r.request.matching_data.custom_key
-                ) {
-                    if k1 == k2 {
-                        score += 100; // Higher score for exact key match
-                    }
-                }
-                
-                score
-            })
-            .map(|(id, req)| (id.clone(), req))
-    }
+
 
     pub async fn process_receive(&self, request: ReceiveRequest) -> Result<MatchResponse, BumpError> {
         // Validate request has either location or custom key
@@ -218,7 +174,7 @@ impl MatchingService {
         };
         
         // Subscribe to send queue events before adding our request
-        let mut send_events = self.send_queue.subscribe();
+        let send_events = self.send_queue.subscribe();
         
         // First check for existing matches
         if let Some(matched_request) = self.send_queue.find_match(&queued_request).await? {
@@ -229,7 +185,7 @@ impl MatchingService {
                 status: MatchStatus::Matched,
                 sender_id: Some(matched_request.id),
                 receiver_id: Some(request_id),
-                timestamp: now.unix_timestamp_nanos() / 1_000_000,
+                timestamp: (now.unix_timestamp_nanos() / 1_000_000) as i64,
                 payload: matched_request.payload,
                 message: None,
             });
@@ -259,7 +215,7 @@ impl MatchingService {
             match event.event_type {
                 RequestEventType::Added => {
                     // Check if this new request matches ours
-                    if let Some(score) = MemoryQueue::calculate_match_score(our_request, &event.request) {
+                    if let Some(_) = MemoryQueue::calculate_match_score(our_request, &event.request) {
                         // Found a match! Remove the matched request
                         self.send_queue.remove_request(&event.request.id).await?;
                         self.receive_queue.remove_request(&our_request.id).await?;
@@ -268,7 +224,7 @@ impl MatchingService {
                             status: MatchStatus::Matched,
                             sender_id: Some(event.request.id),
                             receiver_id: Some(our_request.id.clone()),
-                            timestamp: OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000,
+                            timestamp: (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64,
                             payload: event.request.payload,
                             message: None,
                         });
@@ -280,70 +236,19 @@ impl MatchingService {
         
         Err(BumpError::Timeout)
     }
-                    (None, None) => true,
-                    _ => false,
-                }
-            })
-            .min_by_key(|(_, s)| {
-                let time_diff = (s.request.matching_data.timestamp - request.matching_data.timestamp).abs();
-                let distance = self.calculate_distance(
-                    &s.request.matching_data.location,
-                    &request.matching_data.location
-                );
-                // Use weighted scoring for matching
-                (time_diff as f64 * self.config.temporal_weight + 
-                 distance * self.config.spatial_weight) as i64
-            });
+
+    #[allow(dead_code)]
+    async fn cleanup_expired_requests(&self) -> Result<(), BumpError> {
+        // Clean up expired send requests
+        self.send_queue.cleanup_expired().await?;
         
-        if let Some((id, matched_request)) = best_match {
-            // Remove the matched send request
-            sends.remove(id);
-            return Ok(MatchResponse {
-                status: MatchStatus::Matched,
-                sender_id: Some(id.clone()),
-                receiver_id: Some(request_id),
-                timestamp: now.unix_timestamp_nanos() / 1_000_000,
-                payload: Some(matched_request.request.payload.clone()),
-                message: None,
-            });
-        }
+        // Clean up expired receive requests
+        self.receive_queue.cleanup_expired().await?;
         
-        // No match found, store the receive request
-        let send_request = SendRequest {
-            matching_data: request.matching_data.clone(),
-            payload: String::new(), // Receivers don't have payload
-            ttl: request.ttl,
-        };
-        
-        let expires_at = now + Duration::milliseconds(request.ttl as i64);
-        let pending = PendingRequest {
-            request: send_request,
-            expires_at,
-        };
-        
-        self.pending_receives.write().insert(request_id.clone(), pending);
-        
-        // Wait for the TTL duration
-        tokio::time::sleep(std::time::Duration::from_millis(request.ttl as u64)).await;
-        
-        // Check if request was matched while waiting
-        if !self.pending_receives.read().contains_key(&request_id) {
-            return Ok(MatchResponse {
-                status: MatchStatus::Matched,
-                sender_id: None,
-                receiver_id: Some(request_id),
-                timestamp: now.unix_timestamp_nanos() / 1_000_000,
-                payload: None,
-                message: None,
-            });
-        }
-        
-        // Remove expired request
-        self.pending_receives.write().remove(&request_id);
-        
-        Err(BumpError::Timeout)
+        Ok(())
     }
 
+    #[allow(dead_code)]
     fn calculate_distance(&self, loc1: &Location, loc2: &Location) -> f64 {
         // Haversine formula for calculating great-circle distance
         let lat1 = loc1.lat.to_radians();
@@ -378,13 +283,4 @@ impl MatchingService {
         Ok(())
     }
 
-    fn cleanup_expired_requests(&self) {
-        let now = OffsetDateTime::now_utc();
-        
-        // Clean up expired send requests
-        self.pending_sends.write().retain(|_, req| req.expires_at > now);
-        
-        // Clean up expired receive requests
-        self.pending_receives.write().retain(|_, req| req.expires_at > now);
-    }
 }

@@ -2,7 +2,7 @@
 //! Provides HTTP endpoints for sending and receiving data between devices.
 //! All endpoints use JSON for request/response bodies and follow RESTful principles.
 
-use actix_web::{post, web, HttpResponse, Responder};
+use actix_web::{post, web, HttpResponse, Responder, ResponseError};
 use crate::models::{SendRequest, ReceiveRequest};
 use crate::service::MatchingService;
 use std::sync::Arc;

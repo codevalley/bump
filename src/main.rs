@@ -3,6 +3,8 @@
 //! environment-based configuration.
 
 use actix_web::{web, App, HttpServer};
+use env_logger;
+use log;
 
 // Internal module declarations
 mod api;      // HTTP endpoint handlers
@@ -10,6 +12,7 @@ mod models;   // Data structures and types
 mod service;  // Core business logic
 mod error;    // Error types and handling
 mod config;   // Configuration management
+mod queue;    // Request queue implementation
 
 use service::MatchingService;
 use config::MatchingConfig;

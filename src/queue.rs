@@ -1,8 +1,6 @@
-use std::future::Future;
 use tokio::sync::broadcast;
 use time::OffsetDateTime;
-use uuid::Uuid;
-use crate::models::{MatchingData, MatchResponse};
+use crate::models::MatchingData;
 use crate::error::BumpError;
 
 /// A request stored in the queue awaiting a match.
@@ -33,6 +31,7 @@ pub struct RequestEvent {
 #[derive(Clone, Debug)]
 pub enum RequestEventType {
     Added,
+    #[allow(dead_code)]
     Matched(String), // ID of the matching request
     Expired,
     Removed,
@@ -89,7 +88,7 @@ impl MemoryQueue {
         }
     }
     
-    fn calculate_match_score(req1: &QueuedRequest, req2: &QueuedRequest) -> Option<i32> {
+    pub fn calculate_match_score(req1: &QueuedRequest, req2: &QueuedRequest) -> Option<i32> {
         // Time proximity is mandatory
         let time_diff = (req1.matching_data.timestamp - req2.matching_data.timestamp).abs();
         if time_diff > 500 { // TODO: Make configurable
@@ -100,7 +99,7 @@ impl MemoryQueue {
         let mut has_secondary_match = false;
         
         // Location match
-        if let (Some(loc1), Some(loc2)) = (
+        if let (Some(_loc1), Some(_loc2)) = (
             &req1.matching_data.location,
             &req2.matching_data.location
         ) {
