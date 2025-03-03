@@ -21,3 +21,4 @@ envy = "0.4"       # For environment variable parsing
 dotenv = "0.15"    # For .env file support
 async-trait = "0.1"  # For async traits
 serial_test = "2.0.0"  # For serializing test execution
+futures = "0.3"     # For async utilities
