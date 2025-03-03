@@ -1,0 +1,24 @@
+# Generated files
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Local development
+.git
+.github
+.vscode
+.idea
+.env
+*.log
+
+# Documentation and markdown files
+*.md
+!README.md
+
+# Test artifacts
+**/__pycache__/
+**/.pytest_cache/
+
+# System files
+.DS_Store
+Thumbs.db

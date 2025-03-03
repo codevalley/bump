@@ -2,7 +2,7 @@
 //! Sets up the HTTP server, configures logging, and initializes the service with
 //! environment-based configuration.
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpServer, HttpResponse}; 
 use env_logger;
 use log;
 
@@ -52,6 +52,14 @@ async fn main() -> std::io::Result<()> {
     let service = web::Data::new(MatchingService::new(Some(config)));
 
     // Configure and start the HTTP server
+    // Get port from environment variable or use default
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
+        .expect("PORT environment variable must be a valid port number");
+    
+    log::info!("Starting server on port {}", port);
+
     HttpServer::new(move || {
         App::new()
             .app_data(service.clone())  // Share service state across workers
@@ -61,8 +69,14 @@ async fn main() -> std::io::Result<()> {
                     .service(api::receive) // POST /bump/receive
                     .service(api::health)  // GET /bump/health
             )
+            // Add a root health check that redirects to /bump/health
+            .route("/health", web::get().to(|| async {
+                HttpResponse::TemporaryRedirect()
+                    .append_header(("Location", "/bump/health"))
+                    .finish()
+            }))
     })
-    .bind(("0.0.0.0", 8080))?  // Bind to all interfaces:8080
-    .run()                        // Start the server
+    .bind(("0.0.0.0", port))?  // Bind to all interfaces with dynamic port
+    .run()                     // Start the server
     .await
 }
