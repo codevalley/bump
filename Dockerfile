@@ -4,8 +4,9 @@ FROM rust:1.70-slim as builder
 WORKDIR /usr/src/bump
 COPY . .
 
-# Downgrade bytestring to a version compatible with Rust 1.70
-RUN cargo update -p bytestring@1.4.0 --precise 1.3.0
+# Downgrade dependencies to versions compatible with Rust 1.70
+RUN cargo update -p bytestring@1.4.0 --precise 1.3.0 && \
+    cargo update -p geo-types@0.7.15 --precise 0.7.11
 
 # Build the application
 RUN cargo build --release
