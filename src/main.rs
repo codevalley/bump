@@ -5,6 +5,7 @@
 use actix_web::{web, App, HttpServer}; 
 use env_logger;
 use log;
+use std::sync::Arc;
 
 // Internal module declarations
 mod api;      // HTTP endpoint handlers
