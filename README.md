@@ -84,15 +84,62 @@ cargo run
 ### Using Docker
 ```bash
 # Build the image
-docker build -t bump-service .
+docker build -t bump .
 
 # Run the container
-docker run -p 8080:8080 bump-service
+docker run -p 8080:8080 bump
 ```
+
+### Deploying to Railway
+Bump can be easily deployed to [Railway](https://railway.app/) for a free, managed hosting solution:
+
+1. Fork this repository to your GitHub account
+2. Create a new project on Railway and connect it to your GitHub repository
+3. Railway will automatically detect the `Dockerfile.railway` using the `railway.toml` configuration
+4. The service will be deployed with the correct environment and health check settings
+5. Access your service at the URL provided by Railway
+
+The `railway.toml` file contains specific settings for Railway deployment:
+- Uses a custom Dockerfile optimized for Railway's environment
+- Sets up health checks at the root endpoint
+- Configures restart policies for reliable operation
 
 ## 📚 API Documentation
 
 ### Endpoints
+
+#### GET /bump/health
+Get service health status and metrics.
+
+```bash
+curl -X GET http://localhost:8080/bump/health
+```
+
+Example response:
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_seconds": 3600,
+  "metrics": {
+    "send_queue_capacity": 1000,
+    "receive_queue_capacity": 1000,
+    "cleanup_interval_ms": 1000,
+    "max_time_diff_ms": 500,
+    "max_distance_meters": 5
+  },
+  "queue_stats": {
+    "send_queue_size": 12,
+    "receive_queue_size": 5,
+    "matches_count": 256,
+    "expired_count": 18,
+    "match_rate": 4.27
+  }
+}
+```
+
+**Response Codes:**
+- `200 OK`: Service is healthy
 
 #### POST /bump/send
 Send data to a matching receive request.
