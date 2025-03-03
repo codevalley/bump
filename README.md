@@ -90,19 +90,56 @@ docker build -t bump .
 docker run -p 8080:8080 bump
 ```
 
-### Deploying to Railway
-Bump can be easily deployed to [Railway](https://railway.app/) for a free, managed hosting solution:
+### Deployment Options
+
+#### Option 1: Railway (Docker-based)
+You can deploy to [Railway](https://railway.app/) using the provided Dockerfile:
 
 1. Fork this repository to your GitHub account
 2. Create a new project on Railway and connect it to your GitHub repository
 3. Railway will automatically detect the `Dockerfile.railway` using the `railway.toml` configuration
-4. The service will be deployed with the correct environment and health check settings
+4. The service will be deployed with health check settings
 5. Access your service at the URL provided by Railway
 
-The `railway.toml` file contains specific settings for Railway deployment:
-- Uses a custom Dockerfile optimized for Railway's environment
-- Sets up health checks at the root endpoint
-- Configures restart policies for reliable operation
+#### Option 2: Linux VM or Droplet (Recommended)
+For greater control and reliability, deploy directly to a Linux server:
+
+1. Build the application locally: `cargo build --release`
+2. Transfer the binary to your server: 
+   ```bash
+   scp target/release/bump user@your-server:/path/to/app/
+   ```
+3. Set up a systemd service:
+   ```bash
+   # /etc/systemd/system/bump.service
+   [Unit]
+   Description=Bump proximity data exchange service
+   After=network.target
+   
+   [Service]
+   User=bump
+   WorkingDirectory=/path/to/app
+   ExecStart=/path/to/app/bump
+   Restart=on-failure
+   
+   [Install]
+   WantedBy=multi-user.target
+   ```
+4. Enable and start the service:
+   ```bash
+   sudo systemctl enable bump
+   sudo systemctl start bump
+   ```
+
+#### Option 3: Fly.io (Alternative PaaS)
+Fly.io typically has better Rust support:
+
+1. Install the Fly CLI: `curl -L https://fly.io/install.sh | sh`
+2. Authenticate: `fly auth login`
+3. Create a new app: `fly launch`
+4. Deploy: `fly deploy`
+
+See the [Fly.io Rust documentation](https://fly.io/docs/languages-and-frameworks/rust/) for details.
 
 ## 📚 API Documentation
 

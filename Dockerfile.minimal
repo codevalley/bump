@@ -1,17 +1,18 @@
 # Ultra-minimal Dockerfile for Railway
-# Use the smallest possible Alpine-based image
-FROM alpine:latest
+# Use Ubuntu as base for better compatibility
+FROM ubuntu:22.04
 
 # Install only the absolute essentials
-RUN apk --no-cache add ca-certificates
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create a directory for the application
 WORKDIR /app
 
 # Copy pre-built binary directly
-# NOTE: You need to build this locally first using:
-# cargo build --release --target x86_64-unknown-linux-musl
-COPY ./target/x86_64-unknown-linux-musl/release/bump /app/bump
+# NOTE: You need to build this locally on Linux or in a Linux VM first
+COPY ./target/release/bump /app/bump
 
 # Set environment variables
 ENV RUST_LOG=info
