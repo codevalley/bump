@@ -4,38 +4,8 @@ FROM rust:1.70-slim as builder
 WORKDIR /usr/src/bump
 COPY . .
 
-# Create a script to handle dependencies for Rust 1.70
-RUN echo '#!/bin/bash\n\
-# Update dependencies to be compatible with Rust 1.70\n\
-cargo update -p bytestring@1.4.0 --precise 1.3.0\n\
-cargo update -p geo-types@0.7.15 --precise 0.7.11\n\
-cargo update -p is-terminal@0.4.15 --precise 0.4.7\n\
-cargo update -p dashmap@5.5.3 --precise 5.4.0\n\
-\n\
-# Handle any additional dependency issues that may appear during the build\n\
-if ! cargo check --quiet; then\n\
-  echo "Initial dependency resolution failed. Attempting to fix..."\n\
-  # Parse error messages to downgrade problematic packages\n\
-  cargo check 2>&1 | grep -oE "package .* cannot be built because" | grep -oE "`.*`" | tr -d "`" | while read package; do\n\
-    version=$(echo $package | cut -d" " -f2)\n\
-    name=$(echo $package | cut -d" " -f1)\n\
-    echo "Attempting to downgrade $name@$version"\n\
-    # Try downgrading to an older version (this is a simplistic approach)\n\
-    major=$(echo $version | cut -d"." -f1)\n\
-    minor=$(echo $version | cut -d"." -f2)\n\
-    patch=$(echo $version | cut -d"." -f3)\n\
-    new_patch=$((patch - 1))\n\
-    new_version="$major.$minor.$new_patch"\n\
-    cargo update -p $name@$version --precise $new_version\n\
-  done\n\
-fi\n\
-\n\
-# Final check\n\
-cargo check --quiet || echo "Warning: Dependencies still have issues, but continuing build anyway."\n\
-' > /usr/src/bump/fix-deps.sh && chmod +x /usr/src/bump/fix-deps.sh
-
-# Run the dependency fixer script
-RUN /usr/src/bump/fix-deps.sh
+# All dependencies are now pinned in Cargo.toml
+# No need for the complex resolution script
 
 # Build the application
 RUN cargo build --release

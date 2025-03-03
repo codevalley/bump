@@ -6,20 +6,20 @@ authors = ["Your Name <your.email@example.com>"]
 description = "A fast and lightweight proximity-based data exchange service"
 
 [dependencies]
-actix-web = "4.4"
+actix-web = "4.3.1" # Pinned for Rust 1.70 compatibility
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1.34", features = ["full"] }
-log = "0.4"
-env_logger = "0.10"
-thiserror = "1.0"
-geo = "0.26"      # For location calculations
-time = "0.3"      # For timestamp handling
-parking_lot = "0.12" # More efficient than std::sync for our use case
-uuid = { version = "1.6", features = ["v4"] } # For request ID generation
-envy = "0.4"       # For environment variable parsing
-dotenv = "0.15"    # For .env file support
-async-trait = "0.1"  # For async traits
-serial_test = "2.0.0"  # For serializing test execution
-futures = "0.3"     # For async utilities
-rand = "0.8"        # For randomized testing
+serde_json = "1.0.107" # Pinned for Rust 1.70 compatibility
+tokio = { version = "1.28.2", features = ["full"] } # Pinned for Rust 1.70 compatibility
+log = "0.4.19" # Pinned for Rust 1.70 compatibility
+env_logger = "0.10.0" # Pinned for Rust 1.70 compatibility
+thiserror = "1.0.47" # Pinned for Rust 1.70 compatibility
+geo = "0.23.1"    # For location calculations - pinned for Rust 1.70 compatibility
+time = "0.3.20"   # For timestamp handling - pinned for Rust 1.70 compatibility
+parking_lot = "0.12.1" # More efficient than std::sync - pinned for Rust 1.70
+uuid = { version = "1.4.1", features = ["v4"] } # For request ID generation - pinned for Rust 1.70
+envy = "0.4.2"     # For environment variable parsing - pinned for Rust 1.70
+dotenv = "0.15.0"  # For .env file support - pinned for Rust 1.70
+async-trait = "0.1.73" # For async traits - pinned for Rust 1.70
+serial_test = "2.0.0" # For serializing test execution - pinned for Rust 1.70
+futures = "0.3.28"  # For async utilities - pinned for Rust 1.70
+rand = "0.8.5"      # For randomized testing - pinned for Rust 1.70
