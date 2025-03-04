@@ -521,7 +521,7 @@ impl UnifiedQueue {
             
             let (mut send_request, mut receive_request) = match (new_request.request_type, map_request.request_type) {
                 (RequestType::Bump, RequestType::Bump) => {
-                    // For Bump/Bump matches, preserve the channels carefully
+                    // For Bump/Bump matches, preserve the channels and payloads carefully
                     // First request (map_request) has its channel preserved by removing from map above
                     // For the second request (new_request), we need its channel from the parameter
                     
@@ -534,15 +534,18 @@ impl UnifiedQueue {
                     let map_req_has_channel = map_request.response_tx.is_some();
                     let new_req_has_channel = new_request_with_channel.response_tx.is_some();
                     
-                    // For Bump vs Bump, maintain consistent roles:
-                    // Map request (first) = send, New request (second) = receive
-                    let send = map_request;
-                    let mut receive = new_request_with_channel;
+                    // For Bump vs Bump, both sides should get each other's payloads
+                    // and preserve their own channels
+                    let mut send = map_request.clone();
+                    let mut receive = new_request_with_channel.clone();
                     
-                    // CRITICAL: If we lost the channel for the new request, recreate it
+                    // CRITICAL: If we lost the channel for either request, use the other's channel
                     if !new_req_has_channel && map_req_has_channel {
-                        log::warn!("Channel missing for new request - using map request as both send/receive");
-                        receive = send.clone();  // Note: this won't copy the channel
+                        log::warn!("Channel missing for new request - copying from map request");
+                        receive.response_tx = send.response_tx.clone();
+                    } else if !map_req_has_channel && new_req_has_channel {
+                        log::warn!("Channel missing for map request - copying from new request");
+                        send.response_tx = receive.response_tx.clone();
                     }
                     
                     (send, receive)
