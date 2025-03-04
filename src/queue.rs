@@ -696,27 +696,26 @@ impl UnifiedQueue {
         }
         
         // Determine if we have a valid match based on combined criteria
-        // We need either:
-        // 1. A close time AND location match (high total score)
-        // 2. A custom key match plus reasonable time proximity
+        // We MUST have:
+        // 1. Time proximity (mandatory)
+        // 2. At least one secondary factor (location or custom key)
         
-        // If we have a custom key match, we should use a much lower threshold
-        // because custom keys are explicit match identifiers
-        let threshold = if has_secondary_match {
-            if req1.matching_data.custom_key.is_some() && req2.matching_data.custom_key.is_some() {
-                // If both have matching custom keys, use a very low threshold
-                // Just need basic time proximity
-                let custom_key_threshold = self.min_score_with_key / 2;  // Half the regular key threshold
-                log::info!("Using low threshold (custom key match): {}", custom_key_threshold);
-                custom_key_threshold  // Lower threshold for explicit key matches
-            } else {
-                log::info!("Using standard threshold with secondary match: {}", self.min_score_with_key);
-                self.min_score_with_key
-            }
+        // If we don't have a secondary match, reject immediately
+        if !has_secondary_match {
+            log::debug!("No secondary match factor between {} and {}", req1.id, req2.id);
+            return None;
+        }
+        
+        // Set threshold based on matching factors
+        let threshold = if req1.matching_data.custom_key.is_some() && req2.matching_data.custom_key.is_some() {
+            // Custom key match - use lower threshold since it's an exact match
+            let custom_key_threshold = self.min_score_with_key / 2;  // Half the regular key threshold
+            log::info!("Using low threshold (custom key match): {}", custom_key_threshold);
+            custom_key_threshold
         } else {
-            // No custom key, rely on time+location
-            log::info!("Using higher threshold (no custom key): {}", self.min_score_without_key);
-            self.min_score_without_key
+            // Location match only - use standard threshold
+            log::info!("Using standard threshold with location match: {}", self.min_score_with_key);
+            self.min_score_with_key
         };
         
         log::debug!("Total score for {} and {}: {} (threshold: {})", 

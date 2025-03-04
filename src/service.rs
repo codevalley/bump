@@ -417,10 +417,10 @@ impl MatchingService {
     }
     
     fn validate_matching_criteria(&self, data: &MatchingData) -> Result<(), BumpError> {
-        // Must have either location or custom key
+        // Must have either location or custom key as a second factor
         if data.location.is_none() && data.custom_key.is_none() {
             return Err(BumpError::ValidationError(
-                "Request must include either location or custom key".to_string()
+                "Request must include at least one matching factor (location or custom key)".to_string()
             ));
         }
 
