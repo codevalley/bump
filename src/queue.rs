@@ -4,19 +4,16 @@ use crate::models::MatchingData;
 use crate::error::BumpError;
 
 /// Default time difference between requests in milliseconds
-pub const DEFAULT_MAX_TIME_DIFF_MS: i64 = 500;
+const DEFAULT_MAX_TIME_DIFF_MS: i64 = 500;
 
 /// Default score threshold without custom key match
-pub const DEFAULT_MIN_SCORE_WITHOUT_KEY: i32 = 150;
+const DEFAULT_MIN_SCORE_WITHOUT_KEY: i32 = 150;
 
 /// Default score threshold with custom key match
-pub const DEFAULT_MIN_SCORE_WITH_KEY: i32 = 100;
+const DEFAULT_MIN_SCORE_WITH_KEY: i32 = 100;
 
 /// Default custom key match score bonus
-pub const DEFAULT_CUSTOM_KEY_MATCH_BONUS: i32 = 200;
-
-/// Default reduced threshold for custom key matches (half of DEFAULT_MIN_SCORE_WITH_KEY)
-pub const DEFAULT_MIN_SCORE_WITH_CUSTOM_KEY: i32 = DEFAULT_MIN_SCORE_WITH_KEY / 2;
+const DEFAULT_CUSTOM_KEY_MATCH_BONUS: i32 = 200;
 
 /// Default maximum distance for matching (in meters)
 pub const DEFAULT_MAX_DISTANCE_METERS: f64 = 5.0;
@@ -88,6 +85,7 @@ pub enum RequestState {
     /// Request is active and available for matching
     Active,
     /// Request has been reserved for matching but not yet confirmed
+    #[allow(dead_code)]
     Reserved,
     /// Request has been confirmed for matching and will be removed soon
     Matched,
@@ -98,6 +96,7 @@ pub enum RequestState {
 #[derive(Clone, Debug)]
 pub struct RequestEvent {
     /// The request involved in this event
+    #[allow(dead_code)]
     pub request: QueuedRequest,
     /// Type of event (Added, Matched, Expired, Removed)
     pub event_type: RequestEventType,
@@ -107,10 +106,12 @@ pub struct RequestEvent {
 pub enum RequestEventType {
     Added,
     // Signals that a request has been matched with another request
-    Matched(String), // ID of the matching request
+    Matched(#[allow(dead_code)] String), // ID of the matching request
     // Signals that a request has been reserved for matching (phase 1 of two-phase matching)
+    #[allow(dead_code)]
     Reserved(String), // ID of the reserving request
     // Signals that a request has been confirmed for matching (phase 2 of two-phase matching)
+    #[allow(dead_code)]
     Confirmed(String), // ID of the confirming request
     Expired,
     Removed,
@@ -139,6 +140,7 @@ pub trait RequestQueue: Send + Sync + 'static {
     fn size(&self) -> usize;
     
     /// Get the maximum size of the queue
+    #[allow(unused)]
     fn capacity(&self) -> usize;
     
     /// Get the current size of the queue with error handling
@@ -152,6 +154,7 @@ pub trait RequestQueue: Send + Sync + 'static {
     /// Note: With the unified queue implementation, this method is deprecated.
     /// Applications should now create a channel when adding the request and
     /// wait on that channel directly.
+    #[allow(unused)]
     async fn wait_for_match(&self, request_id: &str, ttl_ms: u64) -> Result<Option<MatchResult>, BumpError>;
 }
 
@@ -205,6 +208,7 @@ impl Clone for UnifiedQueue {
 
 impl UnifiedQueue {
     /// Creates a new queue with default matching parameters
+    #[allow(dead_code)]
     pub fn new(event_buffer: usize, max_size: usize) -> Self {
         let (tx, _) = broadcast::channel(event_buffer);
         Self {
@@ -235,6 +239,7 @@ impl UnifiedQueue {
     }
     
     /// Creates a new queue with full custom matching configuration
+    #[allow(dead_code)]
     pub fn new_with_full_config(
         event_buffer: usize, 
         max_size: usize,
@@ -258,6 +263,7 @@ impl UnifiedQueue {
     }
     
     // Helper method to create a QueuedRequest with defaults
+    #[allow(dead_code)]
     pub fn create_request(
         id: String,
         matching_data: MatchingData,
@@ -377,17 +383,14 @@ impl UnifiedQueue {
             send_id.clone()
         };
         
-        // For clarity, the new request that has the channel is:
-        let new_request_id = new_request.id.clone();
-        
         // Create match results for both sides
         // Create match results based on the type of the new request
-        let (send_payload, send_match_id, receive_match_id) = if new_request.request_type == RequestType::Send {
+        let send_payload = if new_request.request_type == RequestType::Send {
             // If the new request is send, it has the payload
-            (new_request.payload.clone(), receive_id.clone(), send_id.clone())
+            new_request.payload.clone()
         } else {
             // If new request is receive, the payload would come from the request in the map
-            (None, receive_id.clone(), send_id.clone())
+            None
         };
             
         let send_match_result = MatchResult {

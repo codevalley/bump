@@ -12,9 +12,6 @@ use log;
 /// appropriate error details in the response body.
 #[derive(Error, Debug)]
 pub enum BumpError {
-    /// Request not found in queue
-    #[error("Request not found: {0}")]
-    RequestNotFound(String),
     /// Returned when request validation fails (400 Bad Request)
     /// Contains a description of what validation failed
     #[error("Invalid request data: {0}")]
@@ -53,12 +50,6 @@ pub enum BumpError {
 impl ResponseError for BumpError {
     fn error_response(&self) -> HttpResponse {
         match self {
-            &BumpError::RequestNotFound(ref msg) => {
-                HttpResponse::NotFound().json(json!({
-                    "error": "request_not_found",
-                    "message": msg
-                }))
-            },
             // 400 Bad Request - Client provided invalid data
             BumpError::ValidationError(msg) => {
                 HttpResponse::BadRequest().json(json!({
