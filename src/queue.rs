@@ -70,13 +70,15 @@ pub struct MatchResult {
     pub timestamp: i64,
 }
 
-/// Type of request (send or receive)
+/// Type of request (send, receive, or bump)
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum RequestType {
     /// Send request with payload
     Send,
     /// Receive request without payload
     Receive,
+    /// Unified bump request that can match with other bump requests
+    Bump,
 }
 
 /// Represents the state of a request in the matching process
@@ -568,12 +570,15 @@ impl UnifiedQueue {
             return None;
         }
         
-        // Don't match requests of the same type
-        if req1.request_type == req2.request_type {
+        // For non-Bump types, don't match requests of the same type
+        if req1.request_type == req2.request_type && req1.request_type != RequestType::Bump {
             log::debug!("Skipping match between {} and {}: both are {:?} requests", 
                       req1.id, req2.id, req1.request_type);
             return None;
         }
+        
+        // For Bump type, allow matching with other Bump requests
+        // No special requirements - use the same criteria as send/receive
         
         let mut score = 0;
         let mut has_secondary_match = false;

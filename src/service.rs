@@ -313,16 +313,21 @@ impl MatchingService {
     }
     
     /// Process a unified bump request that can both send and receive data.
-    /// Handles matching with other bump requests regardless of which side has data.
+    /// Handles matching with other bump requests using a symmetric matching process.
     ///
-    /// The matching process is symmetric:
-    /// 1. Validate the request has required matching criteria
-    /// 2. Add the request to the unified queue with optional payload
-    /// 3. If no immediate match found, wait for a match or timeout
-    /// 4. Exchange payloads with matched request
+    /// Matching criteria are identical to send/receive:
+    /// 1. Time proximity (within configured threshold)
+    /// 2. Location proximity (if provided)
+    /// 3. Custom key match (if provided)
+    ///
+    /// When matched:
+    /// - Both sides can optionally provide payloads
+    /// - Each side receives the other's payload if provided
+    /// - The matching is symmetric (no sender/receiver distinction)
     ///
     /// # Returns
     /// - Ok(MatchResponse) if a match is found
+    /// - Err(BumpError::ValidationError) if no matching criteria provided
     /// - Err(BumpError::Timeout) if no match found within TTL
     /// - Err(BumpError::QueueFull) if the queue is full
     pub async fn process_bump(&self, request: BumpRequest) -> Result<MatchResponse, BumpError> {
@@ -352,7 +357,7 @@ impl MatchingService {
             matching_data,
             request.payload.clone(),  // May be None or Some
             expires_at,
-            RequestType::Send, // We'll treat all bump requests as "send" type for now
+            RequestType::Bump, // Use the new Bump type for unified endpoint
         );
         
         // Add the request to the queue
