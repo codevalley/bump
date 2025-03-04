@@ -536,16 +536,16 @@ impl UnifiedQueue {
                     
                     // For Bump vs Bump, both sides should get each other's payloads
                     // and preserve their own channels
-                    let mut send = map_request.clone();
-                    let mut receive = new_request_with_channel.clone();
+                    let mut send = map_request;
+                    let mut receive = new_request_with_channel;
                     
-                    // CRITICAL: If we lost the channel for either request, use the other's channel
+                    // CRITICAL: If we lost the channel for either request, take ownership of the other's channel
                     if !new_req_has_channel && map_req_has_channel {
-                        log::warn!("Channel missing for new request - copying from map request");
-                        receive.response_tx = send.response_tx.clone();
+                        log::warn!("Channel missing for new request - taking channel from map request");
+                        receive.response_tx = send.response_tx.take();
                     } else if !map_req_has_channel && new_req_has_channel {
-                        log::warn!("Channel missing for map request - copying from new request");
-                        send.response_tx = receive.response_tx.clone();
+                        log::warn!("Channel missing for map request - taking channel from new request");
+                        send.response_tx = receive.response_tx.take();
                     }
                     
                     (send, receive)
