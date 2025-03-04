@@ -137,7 +137,7 @@ Example response:
 ```json
 {
   "status": "ok",
-  "version": "0.2.0",
+  "version": "5",
   "uptime_seconds": 3600,
   "metrics": {
     "send_queue_capacity": 1000,

@@ -754,13 +754,13 @@ impl RequestQueue for UnifiedQueue {
             }
         }
         
+        // Create a clone for events and verification
+        let request_clone = request.clone();
+        
         // First add the request to the queue
         {
             log::info!("Adding request {} to queue (type: {:?}, has_channel: {})", 
                      request.id, request.request_type, request.response_tx.is_some());
-            
-            // Create a clone for the event, before we move the original request
-            let request_clone = request.clone();
             
             // Debug - dump channel status before adding
             log::debug!("Request {} before adding to queue: has_channel={}, type={:?}", 
@@ -834,17 +834,16 @@ impl RequestQueue for UnifiedQueue {
                             request.id, matched_id, e);
                 }
             }
-        } else {
-                log::error!("Failed to add request {} to map", request_clone.id);
-            }
-            
-            // Broadcast Added event - use the clone for the event
-            let _ = self.event_tx.send(RequestEvent {
-                request: request_clone,
-                event_type: RequestEventType::Added,
-            });
         }
         
+        // Return None since no match was found
+        // Broadcast Added event - use the clone for the event
+        let _ = self.event_tx.send(RequestEvent {
+            request: request_clone,
+            event_type: RequestEventType::Added,
+        });
+
+        // Return None since no match was found
         Ok(None)
     }
     

@@ -1,6 +1,6 @@
 [package]
 name = "bump"
-version = "0.2.0"
+version = "0.2.5"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 description = "A fast and lightweight proximity-based data exchange service"
