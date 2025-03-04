@@ -3,7 +3,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use time::{OffsetDateTime, Duration};
 use tokio::sync::broadcast;
-use crate::models::{SendRequest, ReceiveRequest, MatchResponse, MatchStatus, MatchingData, HealthStatus, QueueStats};
+use crate::models::{SendRequest, ReceiveRequest, BumpRequest, MatchResponse, MatchStatus, MatchingData, HealthStatus, QueueStats};
 use crate::error::BumpError;
 use crate::config::MatchingConfig;
 use crate::queue::{UnifiedQueue, RequestEventType, RequestQueue, RequestType, QueuedRequest, RequestState, MatchResult};
@@ -307,6 +307,105 @@ impl MatchingService {
             },
             Err(e) => {
                 log::warn!("Failed to add receive request {}: {:?}", request_id, e);
+                return Err(e);
+            }
+        }
+    }
+    
+    /// Process a unified bump request that can both send and receive data.
+    /// Handles matching with other bump requests regardless of which side has data.
+    ///
+    /// The matching process is symmetric:
+    /// 1. Validate the request has required matching criteria
+    /// 2. Add the request to the unified queue with optional payload
+    /// 3. If no immediate match found, wait for a match or timeout
+    /// 4. Exchange payloads with matched request
+    ///
+    /// # Returns
+    /// - Ok(MatchResponse) if a match is found
+    /// - Err(BumpError::Timeout) if no match found within TTL
+    /// - Err(BumpError::QueueFull) if the queue is full
+    pub async fn process_bump(&self, request: BumpRequest) -> Result<MatchResponse, BumpError> {
+        // Step 1: Validate request has either location or custom key
+        self.validate_matching_criteria(&request.matching_data)?;
+        
+        let request_id = uuid::Uuid::new_v4().to_string();
+        let now = OffsetDateTime::now_utc();
+        let expires_at = now + Duration::milliseconds(request.ttl as i64);
+        
+        // Debug log the custom key and timestamp for this bump request
+        if let Some(key) = &request.matching_data.custom_key {
+            log::info!("Processing bump request with key: {}, timestamp: {}", 
+                      key, request.matching_data.timestamp);
+        }
+        
+        // Create a copy of matching data with server-assigned timestamp
+        let mut matching_data = request.matching_data.clone();
+        matching_data.timestamp = Self::get_current_timestamp_ms();
+        
+        log::info!("Server-assigned timestamp for bump request {}: {} (client timestamp was: {})",
+                 request_id, matching_data.timestamp, request.matching_data.timestamp);
+        
+        // Create a queued request with a channel
+        let (queued_request, rx) = Self::create_queued_request(
+            request_id.clone(),
+            matching_data,
+            request.payload.clone(),  // May be None or Some
+            expires_at,
+            RequestType::Send, // We'll treat all bump requests as "send" type for now
+        );
+        
+        // Add the request to the queue
+        log::info!("Adding bump request {} to queue", request_id);
+        match self.queue.add_request(queued_request).await {
+            Ok(Some(match_result)) => {
+                // Immediate match found
+                log::info!("Immediate match found for bump request {}", request_id);
+                
+                return Ok(MatchResponse {
+                    status: MatchStatus::Matched,
+                    sender_id: Some(request_id),
+                    receiver_id: Some(match_result.matched_with),
+                    timestamp: match_result.timestamp,
+                    payload: match_result.payload,
+                    message: None,
+                });
+            },
+            Ok(None) => {
+                // No immediate match found, wait for one using the rx channel
+                log::info!("No immediate match found for bump request {}, waiting...", request_id);
+                
+                // Wait for a match with timeout
+                let ttl = std::time::Duration::from_millis(request.ttl as u64);
+                match tokio::time::timeout(ttl, rx).await {
+                    Ok(Ok(match_result)) => {
+                        // We got a match result from the oneshot channel
+                        log::info!("Match found for bump request {}", request_id);
+                        
+                        return Ok(MatchResponse {
+                            status: MatchStatus::Matched,
+                            sender_id: Some(request_id),
+                            receiver_id: Some(match_result.matched_with),
+                            timestamp: match_result.timestamp,
+                            payload: match_result.payload,
+                            message: None,
+                        });
+                    },
+                    Ok(Err(_recv_error)) => {
+                        // The channel was dropped, maybe the request was removed
+                        log::warn!("Channel was dropped for bump request {}", request_id);
+                        return Err(BumpError::NotFound("Request channel dropped".to_string()));
+                    },
+                    Err(_timeout) => {
+                        // Timed out waiting for a match
+                        log::info!("No match found for bump request {} (timeout)", request_id);
+                        let _ = self.queue.remove_request(&request_id).await;
+                        return Err(BumpError::Timeout);
+                    }
+                }
+            },
+            Err(e) => {
+                log::warn!("Failed to add bump request {}: {:?}", request_id, e);
                 return Err(e);
             }
         }

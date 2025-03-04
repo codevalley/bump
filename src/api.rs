@@ -3,7 +3,7 @@
 //! All endpoints use JSON for request/response bodies and follow RESTful principles.
 
 use actix_web::{post, get, web, HttpResponse, Responder, ResponseError};
-use crate::models::{SendRequest, ReceiveRequest};
+use crate::models::{SendRequest, ReceiveRequest, BumpRequest};
 use crate::service::MatchingService;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -185,4 +185,58 @@ pub async fn timestamp() -> impl Responder {
     
     // Return as plain text
     HttpResponse::Ok().body(timestamp.to_string())
+}
+
+/// Unified bump endpoint for symmetric data exchange.
+///
+/// This endpoint accepts a JSON payload containing:
+/// - matchingData: Criteria for matching (timestamp, location, custom key)
+/// - payload: Optional data to share with the matched request
+/// - ttl: Time to live for the request in milliseconds
+///
+/// The bump endpoint handles both sending and receiving in a single request.
+/// When two compatible bump requests meet, they exchange their payloads.
+///
+/// # Returns
+/// - 200 OK with match details if successful
+/// - 408 Request Timeout if no match found within TTL
+/// - 429 Too Many Requests if queue is full
+/// - 400 Bad Request if request data is invalid
+#[post("/bump")]
+pub async fn bump(
+    request: web::Json<BumpRequest>,
+    service: Option<web::Data<Arc<MatchingService>>>,
+) -> impl Responder {
+    // First check if service is available
+    if service.is_none() {
+        log::error!("MatchingService not available in bump endpoint");
+        return HttpResponse::InternalServerError().json(serde_json::json!({
+            "status": "error",
+            "message": "Service dependency not available"
+        }));
+    }
+    
+    // Service is available, proceed with request
+    let service = service.unwrap();
+    let request_inner = request.into_inner();
+    
+    // Add debug logging for the request
+    if let Some(key) = &request_inner.matching_data.custom_key {
+        log::info!("API: Processing bump request with key: {}, timestamp: {}", 
+                  key, request_inner.matching_data.timestamp);
+    }
+    
+    log::info!("API: Bump request received with payload: {}", 
+              if request_inner.payload.is_some() { "yes" } else { "no" });
+    
+    match service.process_bump(request_inner).await {
+        Ok(response) => {
+            log::info!("API: Bump request matched successfully: {:?}", response);
+            HttpResponse::Ok().json(response)
+        },
+        Err(e) => {
+            log::warn!("API: Bump request failed: {:?}", e);
+            e.error_response()
+        },
+    }
 }

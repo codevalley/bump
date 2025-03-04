@@ -52,6 +52,21 @@ pub struct ReceiveRequest {
     pub ttl: u32,
 }
 
+/// Unified request structure for the /bump endpoint
+/// This combines send and receive functionality into a single model
+/// with an optional payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BumpRequest {
+    /// Criteria used to match this request with other bump requests
+    pub matching_data: MatchingData,
+    /// Optional data payload to share with the matched request
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload: Option<String>,
+    /// Time-to-live in milliseconds (defaults to 500ms)
+    #[serde(default = "default_ttl")]
+    pub ttl: u32,
+}
+
 /// Response containing the result of a match attempt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchResponse {

@@ -57,6 +57,7 @@ async fn main() -> std::io::Result<()> {
     log::info!("  GET /bump/timestamp");
     log::info!("  POST /bump/send");
     log::info!("  POST /bump/receive");
+    log::info!("  POST /bump/bump");
     
     // Initialize the matching service with configuration
     // Wrapped in Arc for thread-safe sharing
@@ -93,6 +94,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::receive)   // POST /bump/receive
                     .service(api::health)    // GET /bump/health
                     .service(api::timestamp) // GET /bump/timestamp
+                    .service(api::bump)      // POST /bump/bump
             )
             // Register root-level health endpoint for platform health checks
             .service(api::root_health)
