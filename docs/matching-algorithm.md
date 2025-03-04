@@ -103,7 +103,7 @@ The matching algorithm has the following configurable parameters:
 - Score: N/A (immediate rejection due to key mismatch)
 - Result: NO MATCH
 
-## Race Conditions and Two-Phase Matching
+## Race Conditions and Unified Queue Solution
 
 ### The Race Condition Problem
 
@@ -137,43 +137,84 @@ The initial implementation of the matching algorithm had a subtle race condition
 
 The core issue was that the matching process would remove a request from its queue before confirming that both sides of the match were ready to complete. This could leave one side perpetually waiting for a match that was already consumed.
 
-### Two-Phase Matching Solution
+### Unified Queue Solution
 
-To fix this race condition, we implemented an updated matching protocol:
+To fix this race condition, we completely redesigned our approach with a unified queue system:
 
-1. **Improved Queue Management**
-   - The matching algorithm maintains precise control over queue state
-   - Synchronized request removal to prevent race conditions
-   - Improved notification system for match events
+1. **Single Queue Architecture**
+   - One unified queue for both send and receive requests
+   - Each request is tagged with a `RequestType` enum (Send/Receive)
+   - All matching logic happens in a single consistent flow
 
-2. **Atomic Operations**
-   - Uses atomic operations to prevent multiple simultaneous matches
-   - Carefully orchestrated state management
-   - Clear notification to both parties  
+2. **Consistent Matching Process**
+   ```
+   Request (Send or Receive)
+   1. Add request to unified queue
+   2. Queue immediately checks for matching partners
+   3. If match found:
+      - Both requests are atomically matched and removed
+      - Both requesters are directly notified via oneshot channels
+   4. If no match found:
+      - Request remains in queue
+      - Waiter subscribes to events specific to their request
+   ```
 
-This approach ensures that:
-- No request is removed until both sides are ready
-- No request can be matched multiple times
-- System remains consistent even under high concurrency
+3. **Direct Notification System**
+   - Each request contains a oneshot channel for direct notification
+   - When a match occurs, both sides are notified directly
+   - No reliance on broadcast events that could be missed or misinterpreted
 
-### Implementation Details
+### Implementation Benefits
 
-The matching solution uses:
-- Atomic queue operations
-- Synchronized request processing
-- Strong ordering guarantees
-- Timeout mechanism for incomplete matches
-- Rollback procedure for failed matches
+The unified queue approach provides several key advantages:
 
-### Error Handling
+1. **Simplified Logic**
+   - Single code path for matching logic
+   - Matching happens exactly once at a well-defined point
+   - Clear and consistent flow for all request types
 
-The matching protocol gracefully handles several edge cases:
-- Timeouts during the matching process
-- Concurrent matching attempts 
-- System failures during any phase
-- Race conditions with multiple clients
+2. **Direct Communication**
+   - Each request gets notified directly when matched
+   - No need to interpret broadcast events
+   - Immediate response when a match is found
 
-This robust approach ensures that the matching service maintains consistency even under high load and concurrent operations.
+3. **Atomic Operations**
+   - Match operations happen atomically
+   - Both requests are only removed when the match is complete
+   - No possibility of "half-matched" states
+
+4. **Race Condition Elimination**
+   - All matching decisions happen in a single, locked context
+   - Direct notification ensures no requests are left waiting
+   - No duplicate match attempts in different code paths
+
+### Channel Management and Race Condition Fix
+
+A critical aspect of our implementation is proper management of the oneshot channels used for notification:
+
+1. **Early Channel Creation**
+   - Channels are created before requests enter the queue
+   - Each request has its channel from the start
+   - No race condition between matching and channel setup
+
+2. **Careful Clone Handling**
+   - `QueuedRequest::Clone` implementation sets `response_tx: None`
+   - Original request with channel is stored in the queue
+   - Events use clones without channels to avoid ownership issues
+
+3. **Atomic Channel Operations**
+   - During matching, both channels are extracted within the same lock
+   - Channels are taken from the queue before requests are removed
+   - Notifications happen after the lock is released
+
+4. **Lock Management**
+   - Queue locks are held for minimal duration
+   - Notification happens outside critical sections
+   - Prevents deadlocks and improves throughput
+
+This careful handling of channels ensures that even when requests arrive sequentially (rather than simultaneously), they will properly match without getting stuck in a waiting state or experiencing a premature timeout.
+
+This robust approach ensures that the matching service maintains consistency even under high load and concurrent operations while eliminating the race conditions that could cause indefinite waiting.
 
 ## Future Enhancements
 

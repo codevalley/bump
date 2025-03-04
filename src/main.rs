@@ -48,6 +48,13 @@ async fn main() -> std::io::Result<()> {
     let config = MatchingConfig::from_env_or_default();
     log::info!("Starting Bump service with configuration: {:?}", config);
     
+    // Print all registered routes for debugging
+    log::info!("The following endpoints will be available:");
+    log::info!("  GET /");
+    log::info!("  GET /bump/health");
+    log::info!("  POST /bump/send");
+    log::info!("  POST /bump/receive");
+    
     // Initialize the matching service with configuration
     // Wrapped in Arc for thread-safe sharing
     let service = Arc::new(MatchingService::new(Some(config)));

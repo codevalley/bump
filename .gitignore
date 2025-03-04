@@ -18,7 +18,9 @@
 
 # Debug logs
 *.log
-
+send_response.txt
+MATCH_STATS.md
+server_log.txt
 # Test coverage reports
 coverage/
 *.profraw

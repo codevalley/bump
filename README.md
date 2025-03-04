@@ -38,10 +38,11 @@ cargo run
 
 ### Performance & Reliability
 - ⚡ High-performance Rust implementation
-- 🔒 Thread-safe queue management
+- 🔒 Thread-safe queue management with race condition protection
 - 🎯 Configurable matching parameters
 - ⏰ Automatic request cleanup
 - 📊 Queue size limits for resource management
+- 🔄 Unified queue architecture with atomic operations
 
 ### Developer Experience
 - 🛠️ Simple configuration via environment variables
@@ -208,7 +209,7 @@ All parameters can be configured via environment variables:
 |----------|-------------|----------|
 | `BUMP_MAX_QUEUE_SIZE` | Maximum requests per queue | 1000 |
 | `BUMP_MAX_DISTANCE_METERS` | Maximum matching distance | 5.0 |
-| `BUMP_MAX_TIME_DIFF_MS` | Maximum time difference | 500 |
+| `BUMP_MAX_TIME_DIFF_MS` | Maximum time difference in milliseconds | 5000 |
 | `BUMP_DEFAULT_TTL_MS` | Default request TTL | 500 |
 | `RUST_LOG` | Log level (error,warn,info,debug,trace) | info |
 
@@ -221,10 +222,13 @@ bump-service/
 │   ├── api.rs        # HTTP endpoint handlers
 │   ├── models.rs     # Data structures and types
 │   ├── service.rs    # Core matching service implementation
+│   ├── queue.rs      # Unified queue with race condition protection
 │   ├── error.rs      # Error types and handling
 │   └── config.rs     # Configuration management
 ├── tests/            # Integration tests
 ├── docs/            # Documentation and assets
+│   ├── matching-algorithm.md  # Detailed explanation of matching algorithm
+│   └── api-guide.md  # API usage guide
 ├── Cargo.toml       # Rust package manifest
 ├── Dockerfile       # Container definition
 └── README.md        # This file

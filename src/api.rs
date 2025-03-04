@@ -35,9 +35,23 @@ pub async fn send(
     
     // Service is available, proceed with request
     let service = service.unwrap();
-    match service.process_send(request.into_inner()).await {
-        Ok(response) => HttpResponse::Ok().json(response),
-        Err(e) => e.error_response(),
+    let request_inner = request.into_inner();
+    
+    // Add debug logging for the request
+    if let Some(key) = &request_inner.matching_data.custom_key {
+        log::info!("API: Processing send request with key: {}, timestamp: {}", 
+                  key, request_inner.matching_data.timestamp);
+    }
+    
+    match service.process_send(request_inner).await {
+        Ok(response) => {
+            log::info!("API: Send request matched successfully: {:?}", response);
+            HttpResponse::Ok().json(response)
+        },
+        Err(e) => {
+            log::warn!("API: Send request failed: {:?}", e);
+            e.error_response()
+        },
     }
 }
 
@@ -73,9 +87,23 @@ pub async fn receive(
     
     // Service is available, proceed with request
     let service = service.unwrap();
-    match service.process_receive(request.into_inner()).await {
-        Ok(response) => HttpResponse::Ok().json(response),
-        Err(e) => e.error_response(),
+    let request_inner = request.into_inner();
+    
+    // Add debug logging for the request
+    if let Some(key) = &request_inner.matching_data.custom_key {
+        log::info!("API: Processing receive request with key: {}, timestamp: {}", 
+                  key, request_inner.matching_data.timestamp);
+    }
+    
+    match service.process_receive(request_inner).await {
+        Ok(response) => {
+            log::info!("API: Receive request matched successfully: {:?}", response);
+            HttpResponse::Ok().json(response)
+        },
+        Err(e) => {
+            log::warn!("API: Receive request failed: {:?}", e);
+            e.error_response()
+        },
     }
 }
 

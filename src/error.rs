@@ -12,6 +12,9 @@ use log;
 /// appropriate error details in the response body.
 #[derive(Error, Debug)]
 pub enum BumpError {
+    /// Request not found in queue
+    #[error("Request not found: {0}")]
+    RequestNotFound(String),
     /// Returned when request validation fails (400 Bad Request)
     /// Contains a description of what validation failed
     #[error("Invalid request data: {0}")]
@@ -30,6 +33,10 @@ pub enum BumpError {
     /// Returned when request queue is at capacity (429 Too Many Requests)
     #[error("Queue is full")]
     QueueFull,
+    
+    /// Returned when a request is not found in the queue
+    #[error("Request not found: {0}")]
+    NotFound(String),
 }
 
 /// Implementation of actix_web::ResponseError for BumpError.
@@ -46,6 +53,12 @@ pub enum BumpError {
 impl ResponseError for BumpError {
     fn error_response(&self) -> HttpResponse {
         match self {
+            &BumpError::RequestNotFound(ref msg) => {
+                HttpResponse::NotFound().json(json!({
+                    "error": "request_not_found",
+                    "message": msg
+                }))
+            },
             // 400 Bad Request - Client provided invalid data
             BumpError::ValidationError(msg) => {
                 HttpResponse::BadRequest().json(json!({
@@ -65,6 +78,14 @@ impl ResponseError for BumpError {
                 HttpResponse::TooManyRequests().json(json!({
                     "error": "queue_full",
                     "message": "Request queue is full, please try again later"
+                }))
+            }
+            // 404 Not Found - Request not found in queue
+            BumpError::NotFound(msg) => {
+                log::warn!("Request not found: {}", msg);
+                HttpResponse::NotFound().json(json!({
+                    "error": "not_found",
+                    "message": "The requested item could not be found"
                 }))
             }
             // 500 Internal Server Error - Unexpected internal error
