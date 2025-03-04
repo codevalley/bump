@@ -302,19 +302,18 @@ impl UnifiedQueue {
                      request.id, key, request.matching_data.timestamp);
         }
         
-        let opposite_type = match request.request_type {
-            RequestType::Send => RequestType::Receive,
-            RequestType::Receive => RequestType::Send,
-        };
-        
-        log::debug!("Looking for requests of type {:?}", opposite_type);
+        // For the unified /bump endpoint implementation, we need to handle requests differently
+        // For the time being, we want to match bump requests with each other, so we'll
+        // filter based on either:
+        // 1. Request types are opposite (for backward compatibility)
+        // 2. Special case for bump requests - both types are Send but have a custom_key match
         
         // Debug dump all potential match candidates
         log::debug!("Potential match candidates:");
         for (id, r) in requests.iter()
             .filter(|(_, r)| r.expires_at > now)
             .filter(|(_, r)| r.state == RequestState::Active)
-            .filter(|(_, r)| r.request_type == opposite_type)
+            // We no longer filter by type here to keep ALL candidates
         {
             log::debug!("  Candidate: id={}, type={:?}, key={:?}, timestamp={}, channel={}", 
                       id, r.request_type, r.matching_data.custom_key, r.matching_data.timestamp, r.response_tx.is_some());
@@ -326,8 +325,25 @@ impl UnifiedQueue {
             .filter(|(_, r)| r.expires_at > now)
             // Only consider active requests
             .filter(|(_, r)| r.state == RequestState::Active)
-            // Only consider requests of the opposite type
-            .filter(|(_, r)| r.request_type == opposite_type)
+            // Special matching rule: either opposite type OR same type but not the same request
+            .filter(|(id, r)| {
+                let opposite_type = match request.request_type {
+                    RequestType::Send => RequestType::Receive,
+                    RequestType::Receive => RequestType::Send,
+                };
+                
+                // Check for: 
+                // 1. Traditional matching - opposite types
+                // 2. Both are Send but have different IDs (for bump endpoint), and match on custom_key
+                let traditional_match = r.request_type == opposite_type;
+                let bump_match = r.request_type == request.request_type 
+                               && *id != request.id
+                               && r.matching_data.custom_key.is_some() 
+                               && request.matching_data.custom_key.is_some()
+                               && r.matching_data.custom_key == request.matching_data.custom_key;
+                               
+                traditional_match || bump_match
+            })
             // Calculate match score
             .filter_map(|(id, r)| {
                 // Debug logging for key matching
@@ -361,10 +377,27 @@ impl UnifiedQueue {
         log::debug!("Starting atomic_match with new_request={} (type={:?}), matched_id={}", 
                   new_request.id, new_request.request_type, matched_request_ref.id);
         
+        // Special case for bump endpoint: if both are Send type and have custom_key,
+        // we should allow the match between them
+        let both_are_send_with_custom_key = new_request.request_type == RequestType::Send 
+                                         && matched_request_ref.request_type == RequestType::Send
+                                         && new_request.matching_data.custom_key.is_some()
+                                         && matched_request_ref.matching_data.custom_key.is_some()
+                                         && new_request.matching_data.custom_key == matched_request_ref.matching_data.custom_key;
+        
         // Determine which is the send and which is the receive
         let (send_ref, receive_ref) = match (new_request.request_type, matched_request_ref.request_type) {
             (RequestType::Send, RequestType::Receive) => (new_request, matched_request_ref),
             (RequestType::Receive, RequestType::Send) => (matched_request_ref, new_request),
+            _ if both_are_send_with_custom_key => {
+                // Special case for bump endpoint matching - both are Send type
+                // Treat the one with the payload as Send and the other as Receive for processing
+                if new_request.payload.is_some() {
+                    (new_request, matched_request_ref)
+                } else {
+                    (matched_request_ref, new_request)
+                }
+            },
             _ => return Err(BumpError::ValidationError(
                 format!("Cannot match two requests of the same type: {:?}", new_request.request_type)
             )),
@@ -388,24 +421,33 @@ impl UnifiedQueue {
         };
         
         // Create match results for both sides
-        // Create match results based on the type of the new request
-        let send_payload = if new_request.request_type == RequestType::Send {
-            // If the new request is send, it has the payload
-            new_request.payload.clone()
+        // For the bump endpoint, we need to exchange payloads in both directions
+        let send_payload = send_ref.payload.clone();
+        let receive_payload = receive_ref.payload.clone();
+        
+        // Special case for bump endpoint: if both sides have payloads, we should exchange them
+        // This handles the case where two bump requests both have payloads
+        let both_have_payload = send_ref.payload.is_some() && receive_ref.payload.is_some();
+        
+        // For send request, we return the receive request's payload if it exists
+        let send_receives = if both_have_payload {
+            receive_payload.clone() // Send gets receive's payload
         } else {
-            // If new request is receive, the payload would come from the request in the map
-            None
+            None // Traditional send doesn't get a payload back
         };
+        
+        // For receive request, we always return the send payload
+        let receive_receives = send_payload.clone(); // Receive always gets send's payload
             
         let send_match_result = MatchResult {
             matched_with: receive_id.clone(),
-            payload: send_payload.clone(),
+            payload: send_receives,
             timestamp,
         };
         
         let receive_match_result = MatchResult {
             matched_with: send_id.clone(),
-            payload: send_payload,
+            payload: receive_receives,
             timestamp,
         };
         
