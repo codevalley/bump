@@ -448,19 +448,19 @@ impl UnifiedQueue {
         let send_payload = send_ref.payload.clone();
         let receive_payload = receive_ref.payload.clone();
         
-        // Special case for bump endpoint: if both sides have payloads, we should exchange them
-        // This handles the case where two bump requests both have payloads
-        let both_have_payload = send_ref.payload.is_some() && receive_ref.payload.is_some();
-        
-        // For send request, we return the receive request's payload if it exists
-        let send_receives = if both_have_payload {
-            receive_payload.clone() // Send gets receive's payload
+        // For bump requests, always exchange payloads in both directions
+        // For traditional send/receive, only send -> receive gets payload
+        let (send_receives, receive_receives) = if new_request.request_type == RequestType::Bump && matched_request_ref.request_type == RequestType::Bump {
+            // Bump vs Bump: exchange payloads both ways
+            // Use the original request references to ensure correct payload exchange
+            (matched_request_ref.payload.clone(), new_request.payload.clone())
+        } else if send_ref.request_type == RequestType::Send || receive_ref.request_type == RequestType::Receive {
+            // Traditional send/receive: only receive gets payload
+            (None, send_payload.clone())
         } else {
-            None // Traditional send doesn't get a payload back
+            // Other cases: no payload exchange
+            (None, None)
         };
-        
-        // For receive request, we always return the send payload
-        let receive_receives = send_payload.clone(); // Receive always gets send's payload
             
         let send_match_result = MatchResult {
             matched_with: receive_id.clone(),

@@ -81,7 +81,6 @@ pub struct MatchResponse {
     /// Unix timestamp in milliseconds when the match occurred
     pub timestamp: i64,
     /// Data payload if this was a receive request that matched
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<String>,
     /// Optional message providing additional context
     #[serde(skip_serializing_if = "Option::is_none")]
