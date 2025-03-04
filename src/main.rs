@@ -48,6 +48,7 @@ async fn main() -> std::io::Result<()> {
     // Falls back to defaults if env vars not set
     let config = MatchingConfig::from_env_or_default();
     log::info!("Starting Bump service with configuration: {:?}", config);
+    log::info!("TIME DIFF CONFIG: {}ms", config.max_time_diff_ms);
     
     // Print all registered routes for debugging
     log::info!("The following endpoints will be available:");

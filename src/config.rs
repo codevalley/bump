@@ -119,7 +119,7 @@ impl Default for MatchingConfig {
     fn default() -> Self {
         Self {
             max_distance_meters: 5.0,     // 5 meter radius
-            max_time_diff_ms: 500,        // 500ms window
+            max_time_diff_ms: 1500,       // 1500ms window (increased for server-assigned timestamps)
             default_ttl_ms: 500,          // 500ms TTL
             temporal_weight: 0.7,         // Prioritize temporal matching
             spatial_weight: 0.3,          // Secondary spatial matching

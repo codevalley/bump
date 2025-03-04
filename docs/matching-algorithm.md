@@ -24,7 +24,8 @@ Once basic requirements are met, we calculate a match score based on:
 #### Temporal Proximity
 - Time difference between request timestamps
 - Scored inversely proportional (closer = higher score)
-- Maximum time difference: **500ms** (configurable)
+- Maximum time difference: **1500ms** (configurable)
+- Server-assigned timestamps used to prevent client clock drift issues
 - Score range: 0-100 points
 
 #### Spatial Proximity
@@ -59,7 +60,7 @@ The matching algorithm has the following configurable parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `max_time_diff_ms` | 500 | Maximum time difference (milliseconds) |
+| `max_time_diff_ms` | 1500 | Maximum time difference (milliseconds) |
 | `max_distance_meters` | 5.0 | Maximum location distance (meters) |
 | `min_score_without_key` | 150 | Minimum score threshold without custom key |
 | `min_score_with_key` | 100 | Minimum score threshold with custom key |

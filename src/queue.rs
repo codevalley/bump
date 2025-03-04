@@ -226,6 +226,10 @@ impl UnifiedQueue {
     /// Creates a new queue with custom time difference configuration
     pub fn new_with_config(event_buffer: usize, max_size: usize, max_time_diff_ms: i64) -> Self {
         let (tx, _) = broadcast::channel(event_buffer);
+        
+        // Log the max_time_diff_ms value for debugging
+        log::info!("Creating UnifiedQueue with max_time_diff_ms: {}ms", max_time_diff_ms);
+        
         Self {
             requests: std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new())),
             event_tx: tx,

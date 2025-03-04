@@ -126,13 +126,27 @@ fi
 # Test configuration
 echo -e "${BLUE}◆ Test Configuration:${NC}"
 echo -e "${CYAN}   Server URL:  ${NC}$SERVER_URL"
-echo -e "${CYAN}   Timestamp:   ${NC}$FIXED_TIMESTAMP"
 echo -e "${CYAN}   Custom Key:  ${NC}$FIXED_KEY"
 echo -e "${CYAN}   Request TTL: ${NC}$TTL ms"
 
+# Get server timestamp if possible, otherwise use fixed timestamp
+if [ "$START_SERVER" = true ]; then
+    echo -e "${YELLOW}▶ Getting current server timestamp...${NC}"
+    SERVER_TIMESTAMP=$(curl -s "$SERVER_URL/bump/timestamp" || echo "$FIXED_TIMESTAMP")
+    if [[ "$SERVER_TIMESTAMP" =~ ^[0-9]+$ ]]; then
+        echo -e "${GREEN}✓ Got timestamp from server: $SERVER_TIMESTAMP${NC}"
+        TIMESTAMP=$SERVER_TIMESTAMP
+    else
+        echo -e "${YELLOW}⚠ Failed to get timestamp from server, using default: $FIXED_TIMESTAMP${NC}"
+        TIMESTAMP=$FIXED_TIMESTAMP
+    fi
+else
+    TIMESTAMP=$FIXED_TIMESTAMP
+fi
+
 # Create payload for send request
-SEND_PAYLOAD="{\"matching_data\":{\"timestamp\":$FIXED_TIMESTAMP,\"custom_key\":\"$FIXED_KEY\"},\"payload\":\"Forced match test\",\"ttl\":$TTL}"
-RECEIVE_PAYLOAD="{\"matching_data\":{\"timestamp\":$FIXED_TIMESTAMP,\"custom_key\":\"$FIXED_KEY\"},\"ttl\":$TTL}"
+SEND_PAYLOAD="{\"matching_data\":{\"timestamp\":$TIMESTAMP,\"custom_key\":\"$FIXED_KEY\"},\"payload\":\"Forced match test\",\"ttl\":$TTL}"
+RECEIVE_PAYLOAD="{\"matching_data\":{\"timestamp\":$TIMESTAMP,\"custom_key\":\"$FIXED_KEY\"},\"ttl\":$TTL}"
 
 # Show test stages
 echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════${NC}"
@@ -234,7 +248,7 @@ echo "**Test Result:** $([ "$TEST_RESULT" -eq 0 ] && echo "PASSED ✅" || echo "
 echo "" >> MATCH_STATS.md
 echo "## Test Configuration" >> MATCH_STATS.md
 echo "- **Custom Key:** \`$FIXED_KEY\`" >> MATCH_STATS.md
-echo "- **Timestamp:** $FIXED_TIMESTAMP" >> MATCH_STATS.md
+echo "- **Timestamp:** $TIMESTAMP" >> MATCH_STATS.md
 echo "" >> MATCH_STATS.md
 echo "## Results" >> MATCH_STATS.md
 echo "- **Send Request:** $([ "$SEND_SUCCESS" = true ] && echo "Matched ✅" || echo "Failed ❌")" >> MATCH_STATS.md
