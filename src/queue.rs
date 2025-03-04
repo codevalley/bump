@@ -337,7 +337,7 @@ impl UnifiedQueue {
                 // 2. Both are Send but have different IDs (for bump endpoint), and match on custom_key
                 let traditional_match = r.request_type == opposite_type;
                 let bump_match = r.request_type == request.request_type 
-                               && *id != request.id
+                               && id.as_str() != request.id
                                && r.matching_data.custom_key.is_some() 
                                && request.matching_data.custom_key.is_some()
                                && r.matching_data.custom_key == request.matching_data.custom_key;

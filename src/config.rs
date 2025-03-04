@@ -227,7 +227,7 @@ mod tests {
     fn test_default_config() {
         let config = MatchingConfig::default();
         assert_eq!(config.max_distance_meters, 5.0);
-        assert_eq!(config.max_time_diff_ms, 500);
+        assert_eq!(config.max_time_diff_ms, 1500);
         assert_eq!(config.default_ttl_ms, 500);
         assert_eq!(config.temporal_weight, 0.7);
         assert_eq!(config.spatial_weight, 0.3);
