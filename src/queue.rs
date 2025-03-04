@@ -754,7 +754,30 @@ impl RequestQueue for UnifiedQueue {
             }
         }
         
-        // Look for an immediate match
+        // First add the request to the queue
+        {
+            log::info!("Adding request {} to queue (type: {:?}, has_channel: {})", 
+                     request.id, request.request_type, request.response_tx.is_some());
+            
+            // Create a clone for the event, before we move the original request
+            let request_clone = request.clone();
+            
+            // Debug - dump channel status before adding
+            log::debug!("Request {} before adding to queue: has_channel={}, type={:?}", 
+                      request.id, request.response_tx.is_some(), request.request_type);
+            
+            // Insert the original request with channel intact, not a clone
+            let mut requests = self.requests.write();
+            requests.insert(request.id.clone(), request.clone());
+            
+            // Debug - verify the request has been added correctly
+            if let Some(stored_req) = requests.get(&request_clone.id) {
+                log::debug!("Verified: request {} is in map: has_channel={}", 
+                          request_clone.id, stored_req.response_tx.is_some());
+            }
+        }
+
+        // Now look for an immediate match
         log::debug!("Searching for immediate match for request {} of type {:?}", request.id, request.request_type);
         
         // Dump queue contents for debugging
@@ -776,9 +799,6 @@ impl RequestQueue for UnifiedQueue {
             // Found a match - try to atomically match them
             log::info!("Found immediate match for request {} with request {}", 
                     request.id, matched_id);
-            
-            // Get the matching request directly from the map in atomic_match
-            // No need to check channel here since atomic_match will handle that
             
             // Create a temporary QueuedRequest with just the ID for reference
             let matched_req_ref = QueuedRequest {
@@ -812,33 +832,9 @@ impl RequestQueue for UnifiedQueue {
                     // Match failed - log and continue
                     log::warn!("Failed to match request {} with request {}: {:?}", 
                             request.id, matched_id, e);
-                    
-                    // Fall through to adding the request to the queue
                 }
             }
-        }
-        
-        // No immediate match or match failed - add the request to the queue
-        {
-            log::info!("Adding request {} to queue (type: {:?}, has_channel: {})", 
-                     request.id, request.request_type, request.response_tx.is_some());
-            
-            // Create a clone for the event, before we move the original request
-            let request_clone = request.clone();
-            
-            // Debug - dump channel status before adding
-            log::debug!("Request {} before adding to queue: has_channel={}, type={:?}", 
-                      request.id, request.response_tx.is_some(), request.request_type);
-            
-            // Insert the original request with channel intact, not a clone
-            let mut requests = self.requests.write();
-            requests.insert(request.id.clone(), request);
-            
-            // Debug - verify the request has been added correctly
-            if let Some(stored_req) = requests.get(&request_clone.id) {
-                log::debug!("Verified: request {} is in map: has_channel={}", 
-                          request_clone.id, stored_req.response_tx.is_some());
-            } else {
+        } else {
                 log::error!("Failed to add request {} to map", request_clone.id);
             }
             
