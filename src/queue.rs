@@ -428,13 +428,8 @@ impl UnifiedQueue {
         let receive_id = receive_ref.id.clone();
         
         // We need to identify which request is already in the map and which is being added
-        let existing_in_map = if new_request.request_type == RequestType::Send {
-            // New request is a Send, so we expect the Receive to be in the map
-            receive_id.clone()
-        } else {
-            // New request is a Receive, so we expect the Send to be in the map
-            send_id.clone()
-        };
+        // For Bump requests, use the ID directly since we know one must be in the map
+        let existing_in_map = matched_request_ref.id.clone();
         
         // Create match results for both sides
         // For the bump endpoint, we need to exchange payloads in both directions
@@ -497,12 +492,8 @@ impl UnifiedQueue {
             // - new_request: The request being added with a channel
             // - map_request: The request from the map which may also have a channel
             
-            // Determine which is the send and which is the receive 
-            let (mut send_request, mut receive_request) = if map_request.request_type == RequestType::Send {
-                (map_request, new_request.clone())
-            } else {
-                (new_request.clone(), map_request)
-            };
+            // For Bump requests, order doesn't matter since they're symmetric
+            let (mut send_request, mut receive_request) = (new_request.clone(), map_request);
             
             log::debug!("Final mapped requests: send={} (channel={}), receive={} (channel={})",
                       send_request.id, send_request.response_tx.is_some(),
