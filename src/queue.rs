@@ -77,7 +77,7 @@ pub enum RequestType {
     Send,
     /// Receive request without payload
     Receive,
-    /// Unified bump request that can match with other bump requests
+    /// Bump request (unified endpoint) that can have optional payload
     Bump,
 }
 
@@ -365,8 +365,20 @@ impl UnifiedQueue {
             .map(|(id, _)| id);
         
         if let Some(ref id) = matched_id {
-            log::debug!("Found match with ID: {}, has_channel: {}", 
-                      id, requests.get(id).map_or(false, |r| r.response_tx.is_some()));
+            // Get additional information about the matched request
+            if let Some(matched_req) = requests.get(id) {
+                log::debug!("Found match with ID: {}, has_channel: {}, type: {:?}", 
+                          id, matched_req.response_tx.is_some(), matched_req.request_type);
+                
+                // For Bump vs Bump matches, log extra details
+                if request.request_type == RequestType::Bump && matched_req.request_type == RequestType::Bump {
+                    log::info!("Found Bump-Bump match: {} (channel={}) with {} (channel={})",
+                             request.id, request.response_tx.is_some(),
+                             id, matched_req.response_tx.is_some());
+                }
+            } else {
+                log::debug!("Found match with ID: {}, but it's no longer in the map", id);
+            }
         }
             
         matched_id
@@ -493,20 +505,63 @@ impl UnifiedQueue {
             // - map_request: The request from the map which may also have a channel
             
             // For Bump requests, we need to maintain consistent send/receive roles
-            // The first request is always treated as send, second as receive
-            // This maintains the same pattern as send/receive endpoints
+            // and carefully track which request has the channel to avoid dropping it
+            // For Bump vs Bump matches, the add_request method has already added the 
+            // new_request to the queue, but we've also removed map_request from the queue.
+            // We need to ensure channels aren't dropped during this role assignment.
+            
+            // Create an exact clone of the new_request with its channel
+            let new_request_with_channel = if new_request.id == existing_in_map {
+                // If the new request is the one that came from the map, use the original
+                map_request.clone()
+            } else {
+                // Otherwise use the new_request (which has its original channel)
+                new_request.clone()
+            };
+            
             let (mut send_request, mut receive_request) = match (new_request.request_type, map_request.request_type) {
                 (RequestType::Bump, RequestType::Bump) => {
-                    // First request is sender, second is receiver
-                    (map_request, new_request.clone())
+                    // For Bump/Bump matches, preserve the channels carefully
+                    // First request (map_request) has its channel preserved by removing from map above
+                    // For the second request (new_request), we need its channel from the parameter
+                    
+                    // Log detailed debug info
+                    log::debug!("Bump/Bump match: map_req.id={}, new_req.id={}, existing_in_map={}", 
+                              map_request.id, new_request.id, existing_in_map);
+                    log::debug!("Map request channel: {}, New request channel: {}", 
+                               map_request.response_tx.is_some(), new_request_with_channel.response_tx.is_some());
+                    
+                    let map_req_has_channel = map_request.response_tx.is_some();
+                    let new_req_has_channel = new_request_with_channel.response_tx.is_some();
+                    
+                    // For Bump vs Bump, maintain consistent roles:
+                    // Map request (first) = send, New request (second) = receive
+                    let send = map_request;
+                    let mut receive = new_request_with_channel;
+                    
+                    // CRITICAL: If we lost the channel for the new request, recreate it
+                    if !new_req_has_channel && map_req_has_channel {
+                        log::warn!("Channel missing for new request - using map request as both send/receive");
+                        receive = send.clone();  // Note: this won't copy the channel
+                    }
+                    
+                    (send, receive)
                 },
                 (RequestType::Send, _) | (_, RequestType::Receive) => {
                     // Send request is sender, other is receiver
-                    (new_request.clone(), map_request)
+                    if new_request.request_type == RequestType::Send || map_request.request_type == RequestType::Receive {
+                        (new_request_with_channel, map_request)
+                    } else {
+                        (map_request, new_request_with_channel)
+                    }
                 },
                 _ => {
                     // Receive request is receiver, other is sender 
-                    (map_request, new_request.clone())
+                    if new_request.request_type == RequestType::Receive {
+                        (map_request, new_request_with_channel)
+                    } else {
+                        (new_request_with_channel, map_request)
+                    }
                 }
             };
             
@@ -760,32 +815,36 @@ impl RequestQueue for UnifiedQueue {
             }
         }
         
+        // Store request type before moving request
+        let request_id = request.id.clone();
+        let request_type = request.request_type;
+        
         // First check if we have an immediate match
         let request_clone = request.clone();
-        let matched_id = self.find_matching_request(&request);
+        let _matched_id = self.find_matching_request(&request); // Unused, we'll find match again after adding to queue
         
         // Add request to queue
         {
             log::info!("Adding request {} to queue (type: {:?}, has_channel: {})", 
-                     request.id, request.request_type, request.response_tx.is_some());
+                     request_id, request_type, request.response_tx.is_some());
             
             // Debug - dump channel status before adding
             log::debug!("Request {} before adding to queue: has_channel={}, type={:?}", 
-                      request.id, request.response_tx.is_some(), request.request_type);
+                      request_id, request.response_tx.is_some(), request_type);
             
             // Insert the original request with channel intact
             let mut requests = self.requests.write();
-            requests.insert(request.id.clone(), request);
+            requests.insert(request_id.clone(), request);
             
             // Debug - verify the request has been added correctly
-            if let Some(stored_req) = requests.get(&request.id) {
+            if let Some(stored_req) = requests.get(&request_id) {
                 log::debug!("Verified: request {} is in map: has_channel={}", 
-                          request.id, stored_req.response_tx.is_some());
+                          request_id, stored_req.response_tx.is_some());
             }
         }
 
         // Process the match if we found one
-        log::debug!("Searching for immediate match for request {} of type {:?}", request.id, request.request_type);
+        log::debug!("Searching for immediate match for request {} of type {:?}", request_id, request_type);
         
         // Dump queue contents for debugging
         {
@@ -802,20 +861,20 @@ impl RequestQueue for UnifiedQueue {
             }
         }
         
-        if let Some(matched_id) = self.find_matching_request(&request) {
+        if let Some(matched_id) = self.find_matching_request(&request_clone) {
             // Found a match - try to atomically match them
             log::info!("Found immediate match for request {} with request {}", 
-                    request.id, matched_id);
+                    request_id, matched_id);
             
             // Create a temporary QueuedRequest with just the ID for reference
             let matched_req_ref = QueuedRequest {
                 id: matched_id.clone(),
-                matching_data: request.matching_data.clone(),  // Not actually used
+                matching_data: request_clone.matching_data.clone(),  // Not actually used
                 payload: None,
-                expires_at: request.expires_at,     // Not actually used
+                expires_at: request_clone.expires_at,     // Not actually used
                 state: RequestState::Active,        // Not actually used
                 reserved_by: None,
-                request_type: match request.request_type {     // Opposite type
+                request_type: match request_type {     // Opposite type
                     RequestType::Send => RequestType::Receive,
                     RequestType::Receive => RequestType::Send,
                     RequestType::Bump => RequestType::Bump,  // Bump matches with itself
@@ -824,11 +883,11 @@ impl RequestQueue for UnifiedQueue {
             };
             
             // Try the atomic match - the updated atomic_match handles retrieving from the map and sending to channels
-            match self.atomic_match(&request, &matched_req_ref) {
+            match self.atomic_match(&request_clone, &matched_req_ref) {
                 Ok(match_result) => {
                     // Match was successful
                     log::info!("Successfully matched request {} with request {}", 
-                            request.id, matched_id);
+                            request_id, matched_id);
                     
                     // Note: We don't need to send to the channel here anymore
                     // as atomic_match now handles notifying both channels
@@ -838,7 +897,7 @@ impl RequestQueue for UnifiedQueue {
                 Err(e) => {
                     // Match failed - log and continue
                     log::warn!("Failed to match request {} with request {}: {:?}", 
-                            request.id, matched_id, e);
+                            request_id, matched_id, e);
                 }
             }
         }
