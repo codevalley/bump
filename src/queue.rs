@@ -332,6 +332,7 @@ impl UnifiedQueue {
                 let opposite_type = match request.request_type {
                     RequestType::Send => RequestType::Receive,
                     RequestType::Receive => RequestType::Send,
+                    RequestType::Bump => RequestType::Bump, // Bump matches with other Bump requests
                 };
                 
                 // Check for: 
@@ -389,10 +390,20 @@ impl UnifiedQueue {
         
         // Determine which is the send and which is the receive
         let (send_ref, receive_ref) = match (new_request.request_type, matched_request_ref.request_type) {
+            // Traditional send/receive matching
             (RequestType::Send, RequestType::Receive) => (new_request, matched_request_ref),
             (RequestType::Receive, RequestType::Send) => (matched_request_ref, new_request),
+            
+            // Bump-to-Bump matching (symmetric)
+            (RequestType::Bump, RequestType::Bump) => {
+                // For Bump requests, we arbitrarily choose one as send and one as receive
+                // This doesn't affect the actual behavior since both can have payloads
+                (new_request, matched_request_ref)
+            },
+            
+            // Legacy case for old bump endpoint using Send type
             _ if both_are_send_with_custom_key => {
-                // Special case for bump endpoint matching - both are Send type
+                // Special case for old bump endpoint matching - both are Send type
                 // Treat the one with the payload as Send and the other as Receive for processing
                 if new_request.payload.is_some() {
                     (new_request, matched_request_ref)
@@ -400,8 +411,11 @@ impl UnifiedQueue {
                     (matched_request_ref, new_request)
                 }
             },
+            
+            // All other combinations are invalid
             _ => return Err(BumpError::ValidationError(
-                format!("Cannot match two requests of the same type: {:?}", new_request.request_type)
+                format!("Cannot match incompatible request types: {:?} and {:?}", 
+                        new_request.request_type, matched_request_ref.request_type)
             )),
         };
         
@@ -778,6 +792,7 @@ impl RequestQueue for UnifiedQueue {
                 request_type: match request.request_type {     // Opposite type
                     RequestType::Send => RequestType::Receive,
                     RequestType::Receive => RequestType::Send,
+                    RequestType::Bump => RequestType::Bump,  // Bump matches with itself
                 },
                 response_tx: None,                  // Not actually used
             };

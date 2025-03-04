@@ -56,51 +56,57 @@ The new endpoint will:
 
 ## Refactoring Approach
 
-### Phase 1: Add Unified Endpoint
+### Phase 1: Add Unified Endpoint ✅
 
-1. **Create Unified Request/Response Models**:
-   - Develop a `BumpRequest` model based on the common elements of `SendRequest` and `ReceiveRequest`
-   - Update `MatchResponse` to handle the symmetric payload exchange
+1. **Create Unified Request/Response Models** ✅:
+   - Develop a `BumpRequest` model based on the common elements of `SendRequest` and `ReceiveRequest` ✅
+   - Update `MatchResponse` to handle the symmetric payload exchange ✅
 
-2. **Implement `/bump` Endpoint**:
-   - Add new handler in `api.rs` for the `/bump` endpoint 
-   - Map the unified request to our internal queue representation
-   - Reuse the existing matching logic
+2. **Implement `/bump` Endpoint** ✅:
+   - Add new handler in `api.rs` for the `/bump` endpoint ✅
+   - Map the unified request to our internal queue representation ✅
+   - Reuse the existing matching logic ✅
 
-3. **Adapt Queue Implementation**:
-   - Remove the type discrimination in the matching process where appropriate
-   - Focus matching on compatible criteria rather than request types
+3. **Adapt Queue Implementation** ✅:
+   - Remove the type discrimination in the matching process where appropriate ✅
+   - Focus matching on compatible criteria rather than request types ✅
 
-### Phase 2: Refactor Internal Models
+### Phase 2: Refactor Internal Models ✅
 
-1. **Remove Send/Receive Type Distinction**:
-   - Update `QueuedRequest` to contain an optional payload without type distinction
-   - Modify `RequestType` enum to reflect the unified approach
-   - Update matching logic to exchange payloads bidirectionally
+1. **Remove Send/Receive Type Distinction** ✅:
+   - Update `QueuedRequest` to contain an optional payload without type distinction ✅
+   - Modify `RequestType` enum to reflect the unified approach ✅
+   - Update matching logic to exchange payloads bidirectionally ✅
 
-2. **Refactor Scoring System**:
-   - Simplify match scoring to not consider request types
-   - Focus purely on matching criteria quality
+2. **Refactor Scoring System** ✅:
+   - Simplify match scoring to not consider request types ✅
+   - Focus purely on matching criteria quality ✅
 
-### Phase 3: Modernize Existing Endpoints
+### Phase 3: Modernize Existing Endpoints 🚧
 
-1. **Refactor `/send` and `/receive` to Use New Logic**:
-   - Update handlers to use the new unified request processing
-   - Maintain backward compatibility through adapter patterns
+1. **Refactor `/send` and `/receive` to Use New Logic** ❌:
+   - Update handlers to use the new unified request processing ❌
+   - Maintain backward compatibility through adapter patterns ❌
 
-2. **Add Deprecation Notices**:
-   - Document the planned deprecation timeline
-   - Add deprecation headers to API responses
+2. **Add Deprecation Notices** ❌:
+   - Document the planned deprecation timeline ❌
+   - Add deprecation headers to API responses ❌
 
-### Phase 4: Complete Migration
+### Phase 4: Complete Migration 🔜
 
-1. **Deprecate Old Endpoints**:
-   - After sufficient migration period, mark old endpoints as deprecated
-   - Consider redirecting traffic to the new endpoint
+1. **Deprecate Old Endpoints** ❌:
+   - After sufficient migration period, mark old endpoints as deprecated ❌
+   - Consider redirecting traffic to the new endpoint ❌
 
-2. **Remove Legacy Code**:
-   - Clean up redundant type checks and send/receive specific logic
-   - Simplify codebase by removing duplicate handler code
+2. **Remove Legacy Code** ❌:
+   - Clean up redundant type checks and send/receive specific logic ❌
+   - Simplify codebase by removing duplicate handler code ❌
+
+Legend:
+✅ = Completed
+🚧 = In Progress
+❌ = Not Started
+🔜 = Planned
 
 ## Code Structure Impact
 
