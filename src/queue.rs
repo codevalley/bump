@@ -492,8 +492,23 @@ impl UnifiedQueue {
             // - new_request: The request being added with a channel
             // - map_request: The request from the map which may also have a channel
             
-            // For Bump requests, order doesn't matter since they're symmetric
-            let (mut send_request, mut receive_request) = (new_request.clone(), map_request);
+            // For Bump requests, we need to maintain consistent send/receive roles
+            // The first request is always treated as send, second as receive
+            // This maintains the same pattern as send/receive endpoints
+            let (mut send_request, mut receive_request) = match (new_request.request_type, map_request.request_type) {
+                (RequestType::Bump, RequestType::Bump) => {
+                    // First request is sender, second is receiver
+                    (map_request, new_request.clone())
+                },
+                (RequestType::Send, _) | (_, RequestType::Receive) => {
+                    // Send request is sender, other is receiver
+                    (new_request.clone(), map_request)
+                },
+                _ => {
+                    // Receive request is receiver, other is sender 
+                    (map_request, new_request.clone())
+                }
+            };
             
             log::debug!("Final mapped requests: send={} (channel={}), receive={} (channel={})",
                       send_request.id, send_request.response_tx.is_some(),
@@ -745,10 +760,11 @@ impl RequestQueue for UnifiedQueue {
             }
         }
         
-        // Create a clone for events and verification
+        // First check if we have an immediate match
         let request_clone = request.clone();
+        let matched_id = self.find_matching_request(&request);
         
-        // First add the request to the queue
+        // Add request to queue
         {
             log::info!("Adding request {} to queue (type: {:?}, has_channel: {})", 
                      request.id, request.request_type, request.response_tx.is_some());
@@ -757,18 +773,18 @@ impl RequestQueue for UnifiedQueue {
             log::debug!("Request {} before adding to queue: has_channel={}, type={:?}", 
                       request.id, request.response_tx.is_some(), request.request_type);
             
-            // Insert the original request with channel intact, not a clone
+            // Insert the original request with channel intact
             let mut requests = self.requests.write();
-            requests.insert(request.id.clone(), request.clone());
+            requests.insert(request.id.clone(), request);
             
             // Debug - verify the request has been added correctly
-            if let Some(stored_req) = requests.get(&request_clone.id) {
+            if let Some(stored_req) = requests.get(&request.id) {
                 log::debug!("Verified: request {} is in map: has_channel={}", 
-                          request_clone.id, stored_req.response_tx.is_some());
+                          request.id, stored_req.response_tx.is_some());
             }
         }
 
-        // Now look for an immediate match
+        // Process the match if we found one
         log::debug!("Searching for immediate match for request {} of type {:?}", request.id, request.request_type);
         
         // Dump queue contents for debugging
