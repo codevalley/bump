@@ -1,5 +1,5 @@
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use time::{OffsetDateTime, Duration};
 use tokio::sync::broadcast;
@@ -25,6 +25,14 @@ pub struct MatchingService {
 }
 
 impl MatchingService {
+    /// Returns the current timestamp in milliseconds since epoch
+    fn get_current_timestamp_ms() -> i64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64
+    }
+    
     pub fn new(config: Option<MatchingConfig>) -> Self {
         let config = config.unwrap_or_default();
         let service = Self {
@@ -147,9 +155,16 @@ impl MatchingService {
         }
         
         // Create a queued request with a channel
+        // Create a copy of matching data with server-assigned timestamp
+        let mut matching_data = request.matching_data.clone();
+        matching_data.timestamp = Self::get_current_timestamp_ms();
+        
+        log::info!("Server-assigned timestamp for send request {}: {} (client timestamp was: {})",
+                 request_id, matching_data.timestamp, request.matching_data.timestamp);
+        
         let (queued_request, rx) = Self::create_queued_request(
             request_id.clone(),
-            request.matching_data.clone(),
+            matching_data,
             Some(request.payload.clone()),
             expires_at,
             RequestType::Send,
@@ -225,10 +240,17 @@ impl MatchingService {
                       key, request.matching_data.timestamp);
         }
         
+        // Create a copy of matching data with server-assigned timestamp
+        let mut matching_data = request.matching_data.clone();
+        matching_data.timestamp = Self::get_current_timestamp_ms();
+        
+        log::info!("Server-assigned timestamp for receive request {}: {} (client timestamp was: {})",
+                 request_id, matching_data.timestamp, request.matching_data.timestamp);
+                 
         // Create a queued request with a channel
         let (queued_request, rx) = Self::create_queued_request(
             request_id.clone(),
-            request.matching_data.clone(),
+            matching_data,
             None, // Receivers don't have payload
             expires_at,
             RequestType::Receive,

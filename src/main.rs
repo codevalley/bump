@@ -53,6 +53,7 @@ async fn main() -> std::io::Result<()> {
     log::info!("The following endpoints will be available:");
     log::info!("  GET /");
     log::info!("  GET /bump/health");
+    log::info!("  GET /bump/timestamp");
     log::info!("  POST /bump/send");
     log::info!("  POST /bump/receive");
     
@@ -87,9 +88,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(service_data.clone())  // Share service state across workers
             .service(
                 web::scope("/bump")     // All endpoints under /bump prefix
-                    .service(api::send)    // POST /bump/send
-                    .service(api::receive) // POST /bump/receive
-                    .service(api::health)  // GET /bump/health
+                    .service(api::send)      // POST /bump/send
+                    .service(api::receive)   // POST /bump/receive
+                    .service(api::health)    // GET /bump/health
+                    .service(api::timestamp) // GET /bump/timestamp
             )
             // Register root-level health endpoint for platform health checks
             .service(api::root_health)

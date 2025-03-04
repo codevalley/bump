@@ -6,6 +6,7 @@ use actix_web::{post, get, web, HttpResponse, Responder, ResponseError};
 use crate::models::{SendRequest, ReceiveRequest};
 use crate::service::MatchingService;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Send endpoint for initiating a data transfer.
 ///
@@ -165,4 +166,23 @@ pub async fn root_health() -> impl Responder {
         "message": "Bump service is running"
     });
     HttpResponse::Ok().json(simple_health)
+}
+
+/// Timestamp endpoint for providing current server time.
+///
+/// Returns the current server time in milliseconds since epoch.
+/// Clients can use this to synchronize their timestamps with the server.
+///
+/// # Returns
+/// - Plain text response with the timestamp as a number
+#[get("/timestamp")]
+pub async fn timestamp() -> impl Responder {
+    // Get current time in milliseconds since epoch
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    
+    // Return as plain text
+    HttpResponse::Ok().body(timestamp.to_string())
 }

@@ -41,7 +41,7 @@ GET /bump/health
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "uptime_seconds": 3600,
   "metrics": {
     "send_queue_capacity": 1000,
