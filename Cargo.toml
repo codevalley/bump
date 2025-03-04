@@ -23,3 +23,4 @@ async-trait = "0.1"  # For async traits
 serial_test = "2.0.0"  # For serializing test execution
 futures = "0.3"     # For async utilities
 rand = "0.8"        # For randomized testing
+actix-cors = "0.6"    # For CORS support

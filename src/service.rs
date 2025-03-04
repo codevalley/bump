@@ -28,7 +28,11 @@ impl MatchingService {
     pub fn new(config: Option<MatchingConfig>) -> Self {
         let config = config.unwrap_or_default();
         let service = Self {
-            queue: Arc::new(UnifiedQueue::new(100, config.max_queue_size)), // Buffer size of 100 events
+            queue: Arc::new(UnifiedQueue::new_with_config(
+                100, 
+                config.max_queue_size,
+                config.max_time_diff_ms
+            )), // Buffer size of 100 events
             config,
             start_time: Arc::new(Instant::now()),
             matches_count: Arc::new(AtomicU64::new(0)),

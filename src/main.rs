@@ -3,6 +3,7 @@
 //! environment-based configuration.
 
 use actix_web::{web, App, HttpServer}; 
+use actix_cors::Cors;
 use env_logger;
 use log;
 use std::sync::Arc;
@@ -73,7 +74,15 @@ async fn main() -> std::io::Result<()> {
     log::info!("Service initialized successfully!");
 
     HttpServer::new(move || {
+        // Configure CORS
+        let cors = Cors::default()
+            .allow_any_origin() // Allow requests from any origin
+            .allowed_methods(vec!["GET", "POST", "OPTIONS"]) // Allowed HTTP methods
+            .allowed_headers(vec!["Content-Type"]) // Allowed request headers
+            .max_age(3600); // Cache CORS preflight requests for 1 hour
+
         App::new()
+            .wrap(cors) // Add CORS middleware
             // Make service data optional but available
             .app_data(service_data.clone())  // Share service state across workers
             .service(

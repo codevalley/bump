@@ -3,6 +3,27 @@ use time::OffsetDateTime;
 use crate::models::MatchingData;
 use crate::error::BumpError;
 
+/// Default time difference between requests in milliseconds
+pub const DEFAULT_MAX_TIME_DIFF_MS: i64 = 500;
+
+/// Default score threshold without custom key match
+pub const DEFAULT_MIN_SCORE_WITHOUT_KEY: i32 = 150;
+
+/// Default score threshold with custom key match
+pub const DEFAULT_MIN_SCORE_WITH_KEY: i32 = 100;
+
+/// Default custom key match score bonus
+pub const DEFAULT_CUSTOM_KEY_MATCH_BONUS: i32 = 200;
+
+/// Default reduced threshold for custom key matches (half of DEFAULT_MIN_SCORE_WITH_KEY)
+pub const DEFAULT_MIN_SCORE_WITH_CUSTOM_KEY: i32 = DEFAULT_MIN_SCORE_WITH_KEY / 2;
+
+/// Default maximum distance for matching (in meters)
+pub const DEFAULT_MAX_DISTANCE_METERS: f64 = 5.0;
+
+/// Earth radius in meters (standard value)
+pub const EARTH_RADIUS_METERS: f64 = 6_371_000.0;
+
 /// A request stored in the queue awaiting a match.
 /// Each request has a unique ID, matching criteria, optional payload,
 /// and an expiration time.
@@ -151,6 +172,18 @@ pub struct UnifiedQueue {
     event_tx: broadcast::Sender<RequestEvent>,
     /// Maximum number of requests allowed in queue
     max_size: usize,
+    
+    // Matching configuration parameters
+    /// Max time difference in milliseconds (from config)
+    max_time_diff_ms: i64,
+    /// Max distance in meters for spatial matching
+    max_distance_meters: f64,
+    /// Minimum score threshold without custom key
+    min_score_without_key: i32,
+    /// Minimum score threshold with custom key
+    min_score_with_key: i32,
+    /// Bonus points for custom key match
+    custom_key_match_bonus: i32,
 }
 
 impl Clone for UnifiedQueue {
@@ -161,17 +194,66 @@ impl Clone for UnifiedQueue {
             requests: self.requests.clone(),
             event_tx: self.event_tx.clone(),
             max_size: self.max_size,
+            max_time_diff_ms: self.max_time_diff_ms,
+            max_distance_meters: self.max_distance_meters,
+            min_score_without_key: self.min_score_without_key,
+            min_score_with_key: self.min_score_with_key,
+            custom_key_match_bonus: self.custom_key_match_bonus,
         }
     }
 }
 
 impl UnifiedQueue {
+    /// Creates a new queue with default matching parameters
     pub fn new(event_buffer: usize, max_size: usize) -> Self {
         let (tx, _) = broadcast::channel(event_buffer);
         Self {
             requests: std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new())),
             event_tx: tx,
             max_size,
+            max_time_diff_ms: DEFAULT_MAX_TIME_DIFF_MS,
+            max_distance_meters: DEFAULT_MAX_DISTANCE_METERS,
+            min_score_without_key: DEFAULT_MIN_SCORE_WITHOUT_KEY,
+            min_score_with_key: DEFAULT_MIN_SCORE_WITH_KEY,
+            custom_key_match_bonus: DEFAULT_CUSTOM_KEY_MATCH_BONUS,
+        }
+    }
+    
+    /// Creates a new queue with custom time difference configuration
+    pub fn new_with_config(event_buffer: usize, max_size: usize, max_time_diff_ms: i64) -> Self {
+        let (tx, _) = broadcast::channel(event_buffer);
+        Self {
+            requests: std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new())),
+            event_tx: tx,
+            max_size,
+            max_time_diff_ms,
+            max_distance_meters: DEFAULT_MAX_DISTANCE_METERS,
+            min_score_without_key: DEFAULT_MIN_SCORE_WITHOUT_KEY,
+            min_score_with_key: DEFAULT_MIN_SCORE_WITH_KEY,
+            custom_key_match_bonus: DEFAULT_CUSTOM_KEY_MATCH_BONUS,
+        }
+    }
+    
+    /// Creates a new queue with full custom matching configuration
+    pub fn new_with_full_config(
+        event_buffer: usize, 
+        max_size: usize,
+        max_time_diff_ms: i64,
+        max_distance_meters: f64,
+        min_score_without_key: i32,
+        min_score_with_key: i32,
+        custom_key_match_bonus: i32
+    ) -> Self {
+        let (tx, _) = broadcast::channel(event_buffer);
+        Self {
+            requests: std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new())),
+            event_tx: tx,
+            max_size,
+            max_time_diff_ms,
+            max_distance_meters,
+            min_score_without_key,
+            min_score_with_key,
+            custom_key_match_bonus,
         }
     }
     
@@ -245,7 +327,7 @@ impl UnifiedQueue {
                     log::info!("Comparing keys: {} vs {} = {}", key1, key2, key1 == key2);
                 }
                 
-                let score = Self::calculate_match_score(request, r);
+                let score = self.calculate_match_score(request, r);
                 
                 // Just return id and score - we'll get the actual request by ID in atomic_match
                 score.map(|score| (id.clone(), score))
@@ -430,7 +512,7 @@ impl UnifiedQueue {
     }
 
     // Calculate match score between two requests
-    pub fn calculate_match_score(req1: &QueuedRequest, req2: &QueuedRequest) -> Option<i32> {
+    pub fn calculate_match_score(&self, req1: &QueuedRequest, req2: &QueuedRequest) -> Option<i32> {
         // Don't match requests with same ID
         if req1.id == req2.id {
             log::debug!("Skipping self-match between {} and {}", req1.id, req2.id);
@@ -450,8 +532,9 @@ impl UnifiedQueue {
         // Time proximity is scored based on how close the timestamps are
         let time_diff = (req1.matching_data.timestamp - req2.matching_data.timestamp).abs();
         
-        // Get max time difference from config - increased for testing
-        let max_time_diff = 5000; // Increased to 5 seconds for testing
+        // Get max time difference from the instance configuration
+        let max_time_diff = self.max_time_diff_ms;
+        
         log::info!("Time diff between {} and {}: {}ms (max allowed: {}ms)", 
                   req1.id, req2.id, time_diff, max_time_diff);
         
@@ -490,12 +573,11 @@ impl UnifiedQueue {
                    lat1.cos() * lat2.cos() * (delta_lon / 2.0).sin().powi(2);
             let c = 2.0 * a.sqrt().asin();
             
-            // Earth radius in meters
-            let earth_radius = 6_371_000.0; // Standard Earth radius
-            let distance = earth_radius * c;
+            // Calculate distance using Earth radius constant
+            let distance = EARTH_RADIUS_METERS * c;
             
-            // Max acceptable distance
-            let max_distance = 5.0; // 5 meters
+            // Max acceptable distance from the instance configuration
+            let max_distance = self.max_distance_meters;
             
             log::debug!("Distance between {} and {}: {:.2}m (max allowed: {:.2}m)", 
                       req1.id, req2.id, distance, max_distance);
@@ -529,7 +611,7 @@ impl UnifiedQueue {
                           req1.id, req2.id, k1, k2);
                 has_secondary_match = true;
                 // Custom key matching is a strong signal - give it a high score
-                score += 200;
+                score += self.custom_key_match_bonus;
             } else {
                 // If custom keys are provided but don't match, this is a strong
                 // negative signal - we should never match these requests
@@ -549,8 +631,6 @@ impl UnifiedQueue {
         // We need either:
         // 1. A close time AND location match (high total score)
         // 2. A custom key match plus reasonable time proximity
-        let min_score_without_key = 150; // Need good time+location scores
-        let min_score_with_key = 100;    // Lower threshold with matching key
         
         // If we have a custom key match, we should use a much lower threshold
         // because custom keys are explicit match identifiers
@@ -558,16 +638,17 @@ impl UnifiedQueue {
             if req1.matching_data.custom_key.is_some() && req2.matching_data.custom_key.is_some() {
                 // If both have matching custom keys, use a very low threshold
                 // Just need basic time proximity
-                log::info!("Using low threshold (custom key match): {}", min_score_with_key);
-                min_score_with_key / 2  // Even lower threshold for explicit key matches
+                let custom_key_threshold = self.min_score_with_key / 2;  // Half the regular key threshold
+                log::info!("Using low threshold (custom key match): {}", custom_key_threshold);
+                custom_key_threshold  // Lower threshold for explicit key matches
             } else {
-                log::info!("Using standard threshold with secondary match: {}", min_score_with_key);
-                min_score_with_key
+                log::info!("Using standard threshold with secondary match: {}", self.min_score_with_key);
+                self.min_score_with_key
             }
         } else {
             // No custom key, rely on time+location
-            log::info!("Using higher threshold (no custom key): {}", min_score_without_key);
-            min_score_without_key
+            log::info!("Using higher threshold (no custom key): {}", self.min_score_without_key);
+            self.min_score_without_key
         };
         
         log::debug!("Total score for {} and {}: {} (threshold: {})", 
