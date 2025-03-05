@@ -31,9 +31,9 @@ pub struct QueuedRequest {
 #[derive(Debug)]
 pub enum ResponseChannel {
     /// Traditional oneshot channel for send/receive
-    OneShot(tokio::sync::oneshot::Sender<MatchResult>),
+    OneShot(tokio::sync::oneshot::Sender<(MatchResult, MatchResult)>),
     /// Broadcast channel for bump requests
-    Broadcast(tokio::sync::broadcast::Sender<MatchResult>),
+    Broadcast(tokio::sync::broadcast::Sender<(MatchResult, MatchResult)>),
 }
 
 impl Clone for QueuedRequest {
@@ -119,7 +119,7 @@ pub enum RequestEventType {
 #[async_trait::async_trait]
 pub trait RequestQueue: Send + Sync + 'static {
     /// Add a new request to the queue
-    async fn add_request(&self, request: QueuedRequest) -> Result<Option<MatchResult>, BumpError>;
+    async fn add_request(&self, request: QueuedRequest) -> Result<Option<(MatchResult, MatchResult)>, BumpError>;
     
     /// Remove a request from the queue
     async fn remove_request(&self, request_id: &str) -> Result<(), BumpError>;
@@ -149,5 +149,5 @@ pub trait RequestQueue: Send + Sync + 'static {
     /// Applications should now create a channel when adding the request and
     /// wait on that channel directly.
     #[allow(unused)]
-    async fn wait_for_match(&self, request_id: &str, ttl_ms: u64) -> Result<Option<MatchResult>, BumpError>;
+    async fn wait_for_match(&self, request_id: &str, ttl_ms: u64) -> Result<Option<(MatchResult, MatchResult)>, BumpError>;
 }

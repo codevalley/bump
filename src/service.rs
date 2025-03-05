@@ -206,15 +206,22 @@ impl MatchingService {
         // Add the request to the queue
         log::info!("Adding send request {} to queue", request_id);
         match self.queue.add_request(queued_request).await {
-            Ok(Some(match_result)) => {
+            Ok(Some((send_result, recv_result))) => {
                 // Immediate match found
                 log::info!("Immediate match found for send request {}", request_id);
+                
+                // For send requests, we want the send side result
+                let our_match_result = if request_id == send_result.matched_with {
+                    recv_result  // We're the receive side
+                } else {
+                    send_result  // We're the send side
+                };
                 
                 return Ok(MatchResponse {
                     status: MatchStatus::Matched,
                     sender_id: Some(request_id),
-                    receiver_id: Some(match_result.matched_with),
-                    timestamp: match_result.timestamp,
+                    receiver_id: Some(our_match_result.matched_with),
+                    timestamp: our_match_result.timestamp,
                     payload: Some(request.payload),
                     message: None,
                 });
@@ -226,15 +233,22 @@ impl MatchingService {
                 // Wait for a match with timeout
                 let ttl = std::time::Duration::from_millis(request.ttl as u64);
                 match tokio::time::timeout(ttl, rx).await {
-                    Ok(Ok(match_result)) => {
+                    Ok(Ok((send_result, recv_result))) => {
                         // We got a match result from the oneshot channel
                         log::info!("Match found for send request {}", request_id);
+                        
+                        // For send requests, we want the send side result
+                        let our_match_result = if request_id == send_result.matched_with {
+                            recv_result  // We're the receive side
+                        } else {
+                            send_result  // We're the send side
+                        };
                         
                         return Ok(MatchResponse {
                             status: MatchStatus::Matched,
                             sender_id: Some(request_id),
-                            receiver_id: Some(match_result.matched_with),
-                            timestamp: match_result.timestamp,
+                            receiver_id: Some(our_match_result.matched_with),
+                            timestamp: our_match_result.timestamp,
                             payload: Some(request.payload),
                             message: None,
                         });
@@ -292,16 +306,23 @@ impl MatchingService {
         // Add the request to the unified queue
         log::info!("Adding receive request {} to queue", request_id);
         match self.queue.add_request(queued_request).await {
-            Ok(Some(match_result)) => {
+            Ok(Some((send_result, recv_result))) => {
                 // Immediate match found
                 log::info!("Immediate match found for receive request {}", request_id);
                 
+                // For receive requests, we want the receive side result
+                let our_match_result = if request_id == send_result.matched_with {
+                    recv_result  // We're the receive side
+                } else {
+                    send_result  // We're the send side
+                };
+                
                 return Ok(MatchResponse {
                     status: MatchStatus::Matched,
-                    sender_id: Some(match_result.matched_with),
+                    sender_id: Some(our_match_result.matched_with),
                     receiver_id: Some(request_id),
-                    timestamp: match_result.timestamp,
-                    payload: match_result.payload,
+                    timestamp: our_match_result.timestamp,
+                    payload: our_match_result.payload,
                     message: None,
                 });
             },
@@ -400,12 +421,21 @@ impl MatchingService {
                 // Immediate match found
                 log::info!("Immediate match found for bump request {}", request_id);
                 
+                // Choose the correct match result based on which side we are
+                let our_match_result = if request_id == send_match_result.matched_with {
+                    // We are the receive side
+                    recv_match_result
+                } else {
+                    // We are the send side
+                    send_match_result
+                };
+                
                 return Ok(MatchResponse {
                     status: MatchStatus::Matched,
                     sender_id: Some(request_id),
-                    receiver_id: Some(match_result.matched_with),
-                    timestamp: match_result.timestamp,
-                    payload: match_result.payload,
+                    receiver_id: Some(our_match_result.matched_with),
+                    timestamp: our_match_result.timestamp,
+                    payload: our_match_result.payload,
                     message: None,
                 });
             },
@@ -420,12 +450,21 @@ impl MatchingService {
                         // We got a match result from the oneshot channel
                         log::info!("Match found for bump request {}", request_id);
                         
+                        // Choose the correct match result based on which side we are
+                        let our_match_result = if request_id == send_match_result.matched_with {
+                            // We are the receive side
+                            recv_match_result
+                        } else {
+                            // We are the send side
+                            send_match_result
+                        };
+                        
                         return Ok(MatchResponse {
                             status: MatchStatus::Matched,
                             sender_id: Some(request_id),
-                            receiver_id: Some(match_result.matched_with),
-                            timestamp: match_result.timestamp,
-                            payload: match_result.payload,
+                            receiver_id: Some(our_match_result.matched_with),
+                            timestamp: our_match_result.timestamp,
+                            payload: our_match_result.payload,
                             message: None,
                         });
                     },

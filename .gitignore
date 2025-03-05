@@ -21,6 +21,8 @@
 send_response.txt
 MATCH_STATS.md
 server_log.txt
+repopack-output.txt
+repomix-output.txt
 # Test coverage reports
 coverage/
 *.profraw

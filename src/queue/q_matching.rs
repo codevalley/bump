@@ -108,7 +108,7 @@ impl UnifiedQueue {
     }
     
     /// Helper method to atomically match two requests
-    pub(super) fn atomic_match(&self, new_request: &QueuedRequest, matched_request_ref: &QueuedRequest) -> Result<MatchResult, BumpError> {
+    pub(super) fn atomic_match(&self, new_request: &QueuedRequest, matched_request_ref: &QueuedRequest) -> Result<(MatchResult, MatchResult), BumpError> {
         // In this new implementation:
         // - new_request is always the request being added (has full channel)
         // - matched_request_ref is just a reference object with the ID of the matched request
@@ -388,12 +388,12 @@ impl UnifiedQueue {
             log::info!("Notifying send request {} of match", send_id);
             match tx {
                 ResponseChannel::OneShot(tx) => {
-                    if let Err(e) = tx.send(send_match_result.clone()) {
+                    if let Err(e) = tx.send((send_match_result.clone(), receive_match_result.clone())) {
                         log::error!("Failed to send match result to send request {}: {:?}", send_id, e);
                     }
                 },
                 ResponseChannel::Broadcast(tx) => {
-                    if let Err(e) = tx.send(send_match_result.clone()) {
+                    if let Err(e) = tx.send((send_match_result.clone(), receive_match_result.clone())) {
                         log::error!("Failed to broadcast match result to send request {}: {:?}", send_id, e);
                     }
                 }
@@ -404,18 +404,18 @@ impl UnifiedQueue {
             log::info!("Notifying receive request {} of match", receive_id);
             match tx {
                 ResponseChannel::OneShot(tx) => {
-                    if let Err(e) = tx.send(receive_match_result.clone()) {
+                    if let Err(e) = tx.send((send_match_result.clone(), receive_match_result.clone())) {
                         log::error!("Failed to send match result to receive request {}: {:?}", receive_id, e);
                     }
                 },
                 ResponseChannel::Broadcast(tx) => {
-                    if let Err(e) = tx.send(receive_match_result.clone()) {
+                    if let Err(e) = tx.send((send_match_result.clone(), receive_match_result.clone())) {
                         log::error!("Failed to broadcast match result to receive request {}: {:?}", receive_id, e);
                     }
                 }
             }
         }
         
-        Ok(send_match_result)
+        Ok((send_match_result, receive_match_result))
     }
 }
