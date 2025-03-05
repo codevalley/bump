@@ -113,19 +113,52 @@ impl MatchingService {
         payload: Option<String>,
         expires_at: OffsetDateTime,
         request_type: RequestType
-    ) -> (QueuedRequest, tokio::sync::oneshot::Receiver<MatchResult>) {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let request = QueuedRequest {
-            id,
-            matching_data,
-            payload,
-            expires_at,
-            request_type,
-            state: RequestState::Active,
-            reserved_by: None,
-            response_tx: Some(tx),
-        };
-        (request, rx)
+    ) -> (QueuedRequest, Box<dyn std::future::Future<Output = Result<MatchResult, Box<dyn std::error::Error>>> + Send + Unpin>) {
+        match request_type {
+            RequestType::Bump => {
+                // For Bump requests, use broadcast channel so both sides can receive
+                let (tx, rx) = tokio::sync::broadcast::channel(1);
+                let request = QueuedRequest {
+                    id,
+                    matching_data,
+                    payload,
+                    expires_at,
+                    request_type,
+                    state: RequestState::Active,
+                    reserved_by: None,
+                    response_tx: Some(ResponseChannel::Broadcast(tx)),
+                };
+                
+                // Convert broadcast receiver into a future that resolves to the first message
+                let rx_future = Box::new(async move {
+                    rx.subscribe().recv().await
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                });
+                
+                (request, rx_future)
+            },
+            _ => {
+                // For traditional send/receive, use oneshot channel
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let request = QueuedRequest {
+                    id,
+                    matching_data,
+                    payload,
+                    expires_at,
+                    request_type,
+                    state: RequestState::Active,
+                    reserved_by: None,
+                    response_tx: Some(ResponseChannel::OneShot(tx)),
+                };
+                
+                // Convert oneshot receiver into a future
+                let rx_future = Box::new(async move {
+                    rx.await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                });
+                
+                (request, rx_future)
+            }
+        }
     }
 
     /// Process a send request by adding it to the unified queue.

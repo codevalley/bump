@@ -41,7 +41,17 @@ pub struct QueuedRequest {
     /// The request type (send or receive)
     pub request_type: RequestType,
     /// Channel to notify the waiting task when match is found
-    pub response_tx: Option<tokio::sync::oneshot::Sender<MatchResult>>,
+    /// For Bump requests, we use a broadcast channel so both sides can receive
+    /// For traditional send/receive, we use a oneshot channel
+    pub response_tx: Option<ResponseChannel>,
+}
+
+#[derive(Debug)]
+pub enum ResponseChannel {
+    /// Traditional oneshot channel for send/receive
+    OneShot(tokio::sync::oneshot::Sender<MatchResult>),
+    /// Broadcast channel for bump requests
+    Broadcast(tokio::sync::broadcast::Sender<MatchResult>),
 }
 
 impl Clone for QueuedRequest {
@@ -625,15 +635,33 @@ impl UnifiedQueue {
         // Send on the channels outside the lock
         if let Some(tx) = send_tx {
             log::info!("Notifying send request {} of match", send_id);
-            if let Err(e) = tx.send(send_match_result.clone()) {
-                log::error!("Failed to send match result to send request {}: {:?}", send_id, e);
+            match tx {
+                ResponseChannel::OneShot(tx) => {
+                    if let Err(e) = tx.send(send_match_result.clone()) {
+                        log::error!("Failed to send match result to send request {}: {:?}", send_id, e);
+                    }
+                },
+                ResponseChannel::Broadcast(tx) => {
+                    if let Err(e) = tx.send(send_match_result.clone()) {
+                        log::error!("Failed to broadcast match result to send request {}: {:?}", send_id, e);
+                    }
+                }
             }
         }
         
         if let Some(tx) = receive_tx {
             log::info!("Notifying receive request {} of match", receive_id);
-            if let Err(e) = tx.send(receive_match_result) {
-                log::error!("Failed to send match result to receive request {}: {:?}", receive_id, e);
+            match tx {
+                ResponseChannel::OneShot(tx) => {
+                    if let Err(e) = tx.send(receive_match_result.clone()) {
+                        log::error!("Failed to send match result to receive request {}: {:?}", receive_id, e);
+                    }
+                },
+                ResponseChannel::Broadcast(tx) => {
+                    if let Err(e) = tx.send(receive_match_result.clone()) {
+                        log::error!("Failed to broadcast match result to receive request {}: {:?}", receive_id, e);
+                    }
+                }
             }
         }
         
