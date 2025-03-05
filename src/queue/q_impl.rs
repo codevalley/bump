@@ -11,7 +11,7 @@ impl RequestQueue for UnifiedQueue {
     /// - Ok(Some(MatchResult)) if an immediate match was found
     /// - Ok(None) if no match was found and the request was added to the queue
     /// - Err(BumpError) if there was an error adding the request
-    async fn add_request(&self, mut request: QueuedRequest) -> Result<Option<MatchResult>, BumpError> {
+    async fn add_request(&self, mut request: QueuedRequest) -> Result<Option<(MatchResult, MatchResult)>, BumpError> {
         // Ensure the request is in Active state
         request.state = RequestState::Active;
         request.reserved_by = None;
@@ -101,7 +101,7 @@ impl RequestQueue for UnifiedQueue {
                     // Note: We don't need to send to the channel here anymore
                     // as atomic_match now handles notifying both channels
                     
-                    return Ok(Some(match_result));
+                    return Ok(Some((match_result.0, match_result.1)));
                 },
                 Err(e) => {
                     // Match failed - log and continue
@@ -203,7 +203,7 @@ impl RequestQueue for UnifiedQueue {
     ///
     /// DEPRECATED: This method is deprecated and should not be used with the new unified queue design.
     /// Applications should now create a channel when adding the request and wait on that channel directly.
-    async fn wait_for_match(&self, request_id: &str, ttl_ms: u64) -> Result<Option<MatchResult>, BumpError> {
+    async fn wait_for_match(&self, request_id: &str, ttl_ms: u64) -> Result<Option<(MatchResult, MatchResult)>, BumpError> {
         log::warn!("wait_for_match() is deprecated and may cause race conditions. Requests should include a channel when created.");
         
         // Create a channel for the match result

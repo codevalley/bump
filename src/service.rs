@@ -113,7 +113,7 @@ impl MatchingService {
         payload: Option<String>,
         expires_at: OffsetDateTime,
         request_type: RequestType
-    ) -> (QueuedRequest, std::pin::Pin<Box<dyn std::future::Future<Output = Result<MatchResult, Box<dyn std::error::Error>>> + Send>>) {
+    ) -> (QueuedRequest, std::pin::Pin<Box<dyn std::future::Future<Output = Result<(MatchResult, MatchResult), Box<dyn std::error::Error>>> + Send>>) {
         match request_type {
             RequestType::Bump => {
                 // For Bump requests, use broadcast channel so both sides can receive
@@ -222,7 +222,7 @@ impl MatchingService {
                     sender_id: Some(request_id),
                     receiver_id: Some(our_match_result.matched_with),
                     timestamp: our_match_result.timestamp,
-                    payload: Some(request.payload),
+                    payload: None,  // Send requests don't receive payload
                     message: None,
                 });
             },
@@ -249,7 +249,7 @@ impl MatchingService {
                             sender_id: Some(request_id),
                             receiver_id: Some(our_match_result.matched_with),
                             timestamp: our_match_result.timestamp,
-                            payload: Some(request.payload),
+                            payload: None,  // Send requests don't receive payload
                             message: None,
                         });
                     },
@@ -337,12 +337,22 @@ impl MatchingService {
                         // We got a match result from the oneshot channel
                         log::info!("Match found for receive request {}", request_id);
                         
+                        // Destructure the match result tuple
+                        let (send_result, recv_result) = match_result;
+                        
+                        // For receive requests, we want the receive side result
+                        let our_match_result = if request_id == send_result.matched_with {
+                            recv_result  // We're the receive side
+                        } else {
+                            send_result  // We're the send side
+                        };
+                        
                         return Ok(MatchResponse {
                             status: MatchStatus::Matched,
-                            sender_id: Some(match_result.matched_with),
+                            sender_id: Some(our_match_result.matched_with),
                             receiver_id: Some(request_id),
-                            timestamp: match_result.timestamp,
-                            payload: match_result.payload,
+                            timestamp: our_match_result.timestamp,
+                            payload: our_match_result.payload,
                             message: None,
                         });
                     },
@@ -417,17 +427,17 @@ impl MatchingService {
         // Add the request to the queue
         log::info!("Adding bump request {} to queue", request_id);
         match self.queue.add_request(queued_request).await {
-            Ok(Some(match_result)) => {
+            Ok(Some((send_result, recv_result))) => {
                 // Immediate match found
                 log::info!("Immediate match found for bump request {}", request_id);
                 
                 // Choose the correct match result based on which side we are
-                let our_match_result = if request_id == send_match_result.matched_with {
+                let our_match_result = if request_id == send_result.matched_with {
                     // We are the receive side
-                    recv_match_result
+                    recv_result
                 } else {
                     // We are the send side
-                    send_match_result
+                    send_result
                 };
                 
                 return Ok(MatchResponse {
@@ -446,17 +456,17 @@ impl MatchingService {
                 // Wait for a match with timeout
                 let ttl = std::time::Duration::from_millis(request.ttl as u64);
                 match tokio::time::timeout(ttl, rx).await {
-                    Ok(Ok(match_result)) => {
+                    Ok(Ok((send_result, recv_result))) => {
                         // We got a match result from the oneshot channel
                         log::info!("Match found for bump request {}", request_id);
                         
                         // Choose the correct match result based on which side we are
-                        let our_match_result = if request_id == send_match_result.matched_with {
+                        let our_match_result = if request_id == send_result.matched_with {
                             // We are the receive side
-                            recv_match_result
+                            recv_result
                         } else {
                             // We are the send side
-                            send_match_result
+                            send_result
                         };
                         
                         return Ok(MatchResponse {
