@@ -196,21 +196,19 @@ impl UnifiedQueue {
             log::info!("Bump-Bump payload exchange: new_request(id={}) has payload={:?}, matched_request(id={}) has payload={:?}",
                      new_request_id, new_request_payload, matched_request_id, matched_request_payload);
             
-            // Important: Our goal is for each side to receive the OTHER side's payload
-            // The MatchResult for the send side (which will be sent to device A) needs to contain the payload from device B (matched_request_payload)
-            // The MatchResult for the receive side (which will be sent to device B) needs to contain the payload from device A (new_request_payload)
+            // Important: For bump endpoints, each side needs to receive the OTHER side's payload
+            // For simplicity, we'll use the directly obtained payloads:
+            // - New request should receive matched request's payload 
+            // - Matched request should receive new request's payload
             
-            // Now we need to map those payloads correctly to our send/receive variables
-            // Note that send_ref is the new_request and receive_ref is the matched_request
-            // So if send_receives receives matched_request_payload and receive_receives receives new_request_payload,
-            // we'll have the correct payload exchange
-            if send_ref.id == new_request_id { 
-                // Normal case: send is new_request, receive is matched_request
+            // FIXED: Always ensure correct payload mapping regardless of which is send_ref/receive_ref
+            if new_request.id == send_ref.id {
+                // New request is mapped to send_ref, matched request is mapped to receive_ref
                 log::info!("Payload mapping: send(id={}) receives payload from matched(id={}), receive(id={}) receives payload from new(id={})",
                          send_ref.id, matched_request_id, receive_ref.id, new_request_id);
                 (matched_request_payload, new_request_payload)
             } else {
-                // Reversed case: send is matched_request, receive is new_request  
+                // Matched request is mapped to send_ref, new request is mapped to receive_ref
                 log::info!("Payload mapping: send(id={}) receives payload from new(id={}), receive(id={}) receives payload from matched(id={})",
                          send_ref.id, new_request_id, receive_ref.id, matched_request_id);
                 (new_request_payload, matched_request_payload)
