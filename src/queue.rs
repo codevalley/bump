@@ -462,8 +462,17 @@ impl UnifiedQueue {
         // For traditional send/receive, only send -> receive gets payload
         let (send_receives, receive_receives) = if new_request.request_type == RequestType::Bump && matched_request_ref.request_type == RequestType::Bump {
             // Bump vs Bump: exchange payloads both ways
-            // Use the original request references to ensure correct payload exchange
-            (matched_request_ref.payload.clone(), new_request.payload.clone())
+            // The issue was here: we need to use the get_request_from_map function to fetch
+            // the actual request with payload from the map
+            let requests = self.requests.read();
+            let map_request_payload = if let Some(req) = requests.get(&matched_request_ref.id) {
+                req.payload.clone()
+            } else {
+                None
+            };
+            
+            // Now exchange the actual payloads
+            (map_request_payload, new_request.payload.clone())
         } else if send_ref.request_type == RequestType::Send || receive_ref.request_type == RequestType::Receive {
             // Traditional send/receive: only receive gets payload
             (None, send_payload.clone())
@@ -549,14 +558,13 @@ impl UnifiedQueue {
                     let mut send = map_request;
                     let mut receive = new_request_with_channel;
                     
-                    // CRITICAL: If we lost the channel for either request, take ownership of the other's channel
-                    if !new_req_has_channel && map_req_has_channel {
-                        log::warn!("Channel missing for new request - taking channel from map request");
-                        receive.response_tx = send.response_tx.take();
-                    } else if !map_req_has_channel && new_req_has_channel {
-                        log::warn!("Channel missing for map request - taking channel from new request");
-                        send.response_tx = receive.response_tx.take();
-                    }
+                    // We need to ensure both requests have their original channels
+                    // No need to transfer channels between them
+                    // Just make sure we don't lose any channels during processing
+                    
+                    // Log the channel states
+                    log::debug!("send (id={}) has channel: {}, receive (id={}) has channel: {}", 
+                             send.id, send.response_tx.is_some(), receive.id, receive.response_tx.is_some());
                     
                     (send, receive)
                 },
