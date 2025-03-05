@@ -6,7 +6,7 @@ use tokio::sync::broadcast;
 use crate::models::{SendRequest, ReceiveRequest, BumpRequest, MatchResponse, MatchStatus, MatchingData, HealthStatus, QueueStats};
 use crate::error::BumpError;
 use crate::config::MatchingConfig;
-use crate::queue::{UnifiedQueue, RequestEventType, RequestQueue, RequestType, QueuedRequest, RequestState, MatchResult};
+use crate::queue::{UnifiedQueue, RequestEventType, RequestQueue, RequestType, QueuedRequest, RequestState, MatchResult, ResponseChannel};
 
 #[derive(Clone)]
 /// Service that handles matching of send and receive requests.
@@ -113,11 +113,11 @@ impl MatchingService {
         payload: Option<String>,
         expires_at: OffsetDateTime,
         request_type: RequestType
-    ) -> (QueuedRequest, Box<dyn std::future::Future<Output = Result<MatchResult, Box<dyn std::error::Error>>> + Send + Unpin>) {
+    ) -> (QueuedRequest, std::pin::Pin<Box<dyn std::future::Future<Output = Result<MatchResult, Box<dyn std::error::Error>>> + Send>>) {
         match request_type {
             RequestType::Bump => {
                 // For Bump requests, use broadcast channel so both sides can receive
-                let (tx, rx) = tokio::sync::broadcast::channel(1);
+                let (tx, mut rx) = tokio::sync::broadcast::channel(1);
                 let request = QueuedRequest {
                     id,
                     matching_data,
@@ -130,8 +130,8 @@ impl MatchingService {
                 };
                 
                 // Convert broadcast receiver into a future that resolves to the first message
-                let rx_future = Box::new(async move {
-                    rx.subscribe().recv().await
+                let rx_future = Box::pin(async move {
+                    rx.recv().await
                         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
                 });
                 
@@ -152,7 +152,7 @@ impl MatchingService {
                 };
                 
                 // Convert oneshot receiver into a future
-                let rx_future = Box::new(async move {
+                let rx_future = Box::pin(async move {
                     rx.await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
                 });
                 
