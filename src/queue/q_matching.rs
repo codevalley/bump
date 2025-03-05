@@ -176,17 +176,27 @@ impl UnifiedQueue {
         // For traditional send/receive, only send -> receive gets payload
         let (send_receives, receive_receives) = if new_request.request_type == RequestType::Bump && matched_request_ref.request_type == RequestType::Bump {
             // Bump vs Bump: exchange payloads both ways
-            // The issue was here: we need to use the get_request_from_map function to fetch
-            // the actual request with payload from the map
+            // Get the ACTUAL payloads from both requests
+            // Get map request payload directly from the map
             let requests = self.requests.read();
-            let map_request_payload = if let Some(req) = requests.get(&matched_request_ref.id) {
+            let map_request = requests.get(&matched_request_ref.id);
+            
+            // Get the payloads
+            let first_payload = new_request.payload.clone();
+            let second_payload = if let Some(req) = map_request {
                 req.payload.clone()
             } else {
                 None
             };
             
-            // Now exchange the actual payloads
-            (map_request_payload, new_request.payload.clone())
+            // Log what we're doing for debugging
+            log::info!("Bump-Bump payload exchange: new_request.id={}, payload={:?}, matched.id={}, payload={:?}",
+                     new_request.id, first_payload, matched_request_ref.id, second_payload);
+                     
+            // Now exchange the payloads properly - critical for bump endpoint!
+            // send_receives = matched request payload (second)
+            // receive_receives = new request payload (first)
+            (second_payload, first_payload)
         } else if send_ref.request_type == RequestType::Send || receive_ref.request_type == RequestType::Receive {
             // Traditional send/receive: only receive gets payload
             (None, send_payload.clone())
