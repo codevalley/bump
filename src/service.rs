@@ -477,11 +477,14 @@ impl MatchingService {
         // Calculate uptime - this should always work
         let uptime_seconds = self.start_time.elapsed().as_secs();
         
-        // Get queue size - could potentially fail if locks are poisoned
+        // Get queue stats - could potentially fail if locks are poisoned
         let queue_size = match self.queue.size_safe() {
             Ok(size) => size,
             Err(e) => return Err(format!("Failed to get queue size: {:?}", e)),
         };
+        
+        // Create empty request type map - we no longer track types separately
+        let request_types: HashMap<String, usize> = HashMap::new();
         
         // Get match and expired counts - atomic operations should be safe
         let matches_count = self.matches_count.load(Ordering::Relaxed);
@@ -508,21 +511,17 @@ impl MatchingService {
         metrics.insert("max_time_diff_ms".to_string(), self.config.max_time_diff_ms as u64);
         metrics.insert("max_distance_meters".to_string(), self.config.max_distance_meters as u64);
         
-        // For compatibility, report the unified queue size as both send and receive
-        let send_queue_size = queue_size;
-        let receive_queue_size = 0; // Not used anymore
-        
         Ok(HealthStatus {
             status: "ok".to_string(),
             version: version.to_string(),
             uptime_seconds,
             metrics,
             queue_stats: QueueStats {
-                send_queue_size,
-                receive_queue_size,
+                queue_size,
                 matches_count,
                 expired_count,
                 match_rate,
+                request_types,
             },
         })
     }

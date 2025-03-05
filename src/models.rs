@@ -118,17 +118,17 @@ pub struct HealthStatus {
     pub queue_stats: QueueStats,
 }
 
-/// Statistics about the request queues.
+/// Statistics about the request queue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueStats {
-    /// Number of send requests currently in queue
-    pub send_queue_size: usize,
-    /// Number of receive requests currently in queue
-    pub receive_queue_size: usize,
+    /// Total number of requests currently in queue
+    pub queue_size: usize,
     /// Number of matches made since startup
     pub matches_count: u64,
     /// Number of expired requests since startup
     pub expired_count: u64,
     /// Current match rate (matches per second)
     pub match_rate: f64,
+    /// Breakdown of request types in queue
+    pub request_types: HashMap<String, usize>,
 }

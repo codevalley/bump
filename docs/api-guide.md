@@ -45,18 +45,21 @@
     "version": "0.2.5",
     "uptime_seconds": 3600,
     "metrics": {
-      "send_queue_capacity": 1000,
-      "receive_queue_capacity": 1000,
-      "cleanup_interval_ms": 1000,
-      "max_time_diff_ms": 500,
-      "max_distance_meters": 5
+      "queue_capacity": 1000,
+      "max_time_diff_ms": 2000,
+      "cleanup_interval_ms": 2500,
+      "max_distance_meters": 200
     },
     "queue_stats": {
-      "send_queue_size": 12,
-      "receive_queue_size": 5,
+      "queue_size": 5,
       "matches_count": 256,
       "expired_count": 18,
-      "match_rate": 4.27
+      "match_rate": 4.27,
+      "request_types": {
+        "send": 2,
+        "receive": 1,
+        "bump": 2
+      }
     }
   }
   ```
@@ -69,7 +72,12 @@
   | `version` | Current service version |
   | `uptime_seconds` | How long the service has been running |
   | `metrics` | Service configuration values |
-  | `queue_stats` | Statistics about the current queue state |
+  | `queue_stats` | Statistics about the unified request queue |
+  | └─ `queue_size` | Total number of requests in queue |
+  | └─ `matches_count` | Total successful matches since startup |
+  | └─ `expired_count` | Total expired requests since startup |
+  | └─ `match_rate` | Average matches per second |
+  | └─ `request_types` | Breakdown of request types in queue |
 
   ---
 

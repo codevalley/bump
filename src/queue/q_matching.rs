@@ -181,22 +181,40 @@ impl UnifiedQueue {
             let requests = self.requests.read();
             let map_request = requests.get(&matched_request_ref.id);
             
-            // Get the payloads
-            let first_payload = new_request.payload.clone();
-            let second_payload = if let Some(req) = map_request {
+            // We need to be much more explicit about what's happening here to avoid confusion
+            let new_request_id = new_request.id.clone();
+            let new_request_payload = new_request.payload.clone();
+            
+            let matched_request_id = matched_request_ref.id.clone();
+            let matched_request_payload = if let Some(req) = map_request {
                 req.payload.clone()
             } else {
                 None
             };
             
             // Log what we're doing for debugging
-            log::info!("Bump-Bump payload exchange: new_request.id={}, payload={:?}, matched.id={}, payload={:?}",
-                     new_request.id, first_payload, matched_request_ref.id, second_payload);
-                     
-            // Now exchange the payloads properly - critical for bump endpoint!
-            // send_receives = matched request payload (second)
-            // receive_receives = new request payload (first)
-            (second_payload, first_payload)
+            log::info!("Bump-Bump payload exchange: new_request(id={}) has payload={:?}, matched_request(id={}) has payload={:?}",
+                     new_request_id, new_request_payload, matched_request_id, matched_request_payload);
+            
+            // Important: Our goal is for each side to receive the OTHER side's payload
+            // The MatchResult for the send side (which will be sent to device A) needs to contain the payload from device B (matched_request_payload)
+            // The MatchResult for the receive side (which will be sent to device B) needs to contain the payload from device A (new_request_payload)
+            
+            // Now we need to map those payloads correctly to our send/receive variables
+            // Note that send_ref is the new_request and receive_ref is the matched_request
+            // So if send_receives receives matched_request_payload and receive_receives receives new_request_payload,
+            // we'll have the correct payload exchange
+            if send_ref.id == new_request_id { 
+                // Normal case: send is new_request, receive is matched_request
+                log::info!("Payload mapping: send(id={}) receives payload from matched(id={}), receive(id={}) receives payload from new(id={})",
+                         send_ref.id, matched_request_id, receive_ref.id, new_request_id);
+                (matched_request_payload, new_request_payload)
+            } else {
+                // Reversed case: send is matched_request, receive is new_request  
+                log::info!("Payload mapping: send(id={}) receives payload from new(id={}), receive(id={}) receives payload from matched(id={})",
+                         send_ref.id, new_request_id, receive_ref.id, matched_request_id);
+                (new_request_payload, matched_request_payload)
+            }
         } else if send_ref.request_type == RequestType::Send || receive_ref.request_type == RequestType::Receive {
             // Traditional send/receive: only receive gets payload
             (None, send_payload.clone())
