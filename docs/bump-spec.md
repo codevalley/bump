@@ -9,7 +9,7 @@ Mobile devices lack a simple, intuitive way to exchange data when in physical pr
 The Bump Service enables data exchange between two devices through a simple, physical gesture: bumping the devices together. The service uses timestamp, location data, and an optional custom key to identify when two devices have been physically bumped against each other, then facilitates the data transfer between them.
 
 ### 1.3 Key Features
-- Simple API with just two endpoints: `/send` and `/receive`
+- Simple unified API with a single `/bump` endpoint
 - Stateless, ephemeral architecture with no persistent storage requirements
 - Matching based on location, timestamp, and custom verification key
 - Support for text, JSON, or URL payloads
@@ -23,28 +23,27 @@ The Bump Service operates as a lightweight API service that temporarily holds pe
 ### 2.2 Sequence Diagram
 
 ```
-Sender Device             Server              Receiver Device
-     |                      |                       |
-     |------ /send -------->|                       |
-     |      (waiting)       |                       |
-     |                      |<------ /receive ------|
-     |                      |                       |
-     |                      |---(match algorithm)---|
-     |                      |                       |
-     |<---- response -------|                       |
-     |                      |------ response ------>|
-     |                      |                       |
+Device A                 Server                  Device B
+   |                       |                       |
+   |------ /bump -------->|                       |
+   |                      |<------ /bump ---------|
+   |                      |                       |
+   |                      |---(match algorithm)---|
+   |                      |                       |
+   |<---- payload B ------|                       |
+   |                      |------ payload A ----->|
+   |                      |                       |
 ```
 
 If no match is found within the timeout period:
 
 ```
-Sender Device             Server              Receiver Device
-     |                      |                       |
-     |------ /send -------->|                       |
-     |      (waiting)       |                       |
-     |      (timeout)       |                       |
-     |<-- timeout response -|                       |
+Device A                 Server
+   |                       |
+   |------ /bump -------->|
+   |      (waiting)       |
+   |      (timeout)       |
+   |<-- timeout response -|
 ```
 
 ### 2.3 Component Descriptions
@@ -55,60 +54,27 @@ Sender Device             Server              Receiver Device
 
 ## 3. API Specification
 
-### 3.1 Send Endpoint
+### 3.1 Unified Bump Endpoint
 
 ```
-POST /bump/send
+POST /bump
 {
-  "matchingData": {
+  "matching_data": {
     "location": {"lat": 37.7749, "long": -122.4194},
     "timestamp": 1646078423000,
-    "customKey": "🐘"  // Optional second factor
+    "custom_key": "optional-key"
   },
-  "payload": "https://example.com/shared-document", // Or direct text/JSON
+  "payload": "https://example.com/shared-document", // Optional
   "ttl": 500 // Optional, milliseconds to wait for match
 }
 
 Response (Success):
 {
   "status": "matched",
-  "receiverId": "device-123", // Optional, if clients want to track
-  "timestamp": 1646078425000
-}
-
-Response (Timeout):
-{
-  "status": "timeout",
-  "message": "No matching bump request found within the specified time window"
-}
-
-Response (Queue Full):
-{
-  "status": "error",
-  "error": "queue_full",
-  "message": "Request queue is full, please try again later"
-}
-```
-
-### 3.2 Receive Endpoint
-
-```
-POST /bump/receive
-{
-  "matchingData": {
-    "location": {"lat": 37.7749, "long": -122.4194},
-    "timestamp": 1646078424000,
-    "customKey": "🐘"  // Optional second factor
-  },
-  "ttl": 500 // Optional, milliseconds to wait for match
-}
-
-Response (Success):
-{
-  "status": "matched",
-  "senderId": "device-456", // Optional, if clients want to track
+  "matched_with": "request-id-123",
   "timestamp": 1646078425000,
-  "payload": "https://example.com/shared-document" // Whatever the sender provided
+  "payload": "payload from matching request",
+  "message": "Match successful"
 }
 
 Response (Timeout):
@@ -132,7 +98,7 @@ The matching service identifies potential bumps using the following criteria:
 
 1. **Temporal proximity**: Timestamps must be within a configurable tolerance window (default: 500ms)
 2. **Spatial proximity**: Locations must be within a configurable radius (default: 5 meters)
-3. **Custom key match**: If provided, the customKey must match exactly between sender and receiver
+3. **Custom key match**: If provided, the customKey must match exactly between both requests
 
 ### 4.2 Multiple Match Resolution
 In cases where multiple potential matches are found:
@@ -170,7 +136,7 @@ In cases where multiple potential matches are found:
 - Memory usage will scale with concurrent pending requests (limited by max_queue_size)
 - CPU usage will spike during matching operations
 - Network I/O will be the primary bottleneck for most deployments
-- Each queue (send/receive) has a configurable maximum size (default: 1000)
+- Queue has a configurable maximum size (default: 1000)
 - Requests exceeding queue size will receive HTTP 429 (Too Many Requests)
 
 ### 6.2 Scaling Strategies
@@ -185,20 +151,25 @@ In cases where multiple potential matches are found:
 
 ## 7. Implementation Roadmap
 
-### 7.1 Phase 1: Core Service
+### 7.1 Phase 1: Core Service ✅
 - Basic API implementation with in-memory request pool
 - Simple matching algorithm based on timestamp and location
 - Basic error handling and timeouts
 
-### 7.2 Phase 2: Enhancements
+### 7.2 Phase 2: Enhancements ✅
 - Add customKey verification
 - Improve matching algorithm with configurable tolerances
 - Add basic rate limiting and security measures
 
-### 7.3 Phase 3: Optimizations
+### 7.3 Phase 3: Optimizations ✅
 - Performance tuning for high-concurrency scenarios
 - Add metrics and monitoring
 - Implement more sophisticated matching algorithms
+
+### 7.4 Phase 4: API Unification ✅
+- Merge send/receive endpoints into unified `/bump` endpoint
+- Simplify request/response models
+- Update documentation and client libraries
 
 ## 8. Limitations and Future Considerations
 
@@ -215,6 +186,6 @@ In cases where multiple potential matches are found:
 
 ## 9. Conclusion
 
-The Bump Service provides a simple, intuitive way for devices to exchange data through a physical bumping gesture. By focusing on a minimal API surface and stateless architecture, the service can be easily implemented, deployed, and scaled. The flexible matching algorithm and optional customKey verification provide a balance of user convenience and accuracy.
+The Bump Service provides a simple, intuitive way for devices to exchange data through a physical bumping gesture. By focusing on a minimal API surface with a single unified endpoint and stateless architecture, the service can be easily implemented, deployed, and scaled. The flexible matching algorithm and optional customKey verification provide a balance of user convenience and accuracy.
 
 This specification outlines the core functionality required to implement a viable Bump Service while leaving room for future optimizations and enhancements based on real-world usage patterns and feedback.
