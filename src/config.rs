@@ -4,8 +4,8 @@
 //! All configuration parameters can be customized through environment variables with the BUMP_ prefix.
 //!
 //! # Environment Variables
-//! - BUMP_MAX_DISTANCE_METERS: Maximum distance for matching (default: 5.0)
-//! - BUMP_MAX_TIME_DIFF_MS: Maximum time difference (default: 500)
+//! - BUMP_MAX_DISTANCE_METERS: Maximum distance for matching (default: 250.0)
+//! - BUMP_MAX_TIME_DIFF_MS: Maximum time difference (default: 1500)
 //! - BUMP_DEFAULT_TTL_MS: Default request TTL (default: 500)
 //! - BUMP_TEMPORAL_WEIGHT: Weight for time-based matching (default: 0.7)
 //! - BUMP_SPATIAL_WEIGHT: Weight for location-based matching (default: 0.3)
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = MatchingConfig::default();
-        assert_eq!(config.max_distance_meters, 5.0);
+        assert_eq!(config.max_distance_meters, 250.0);
         assert_eq!(config.max_time_diff_ms, 1500);
         assert_eq!(config.default_ttl_ms, 500);
         assert_eq!(config.temporal_weight, 0.7);
@@ -320,7 +320,7 @@ mod tests {
 
         // Test with missing environment variables
         let config = MatchingConfig::from_env_or_default();
-        assert_eq!(config.max_distance_meters, 5.0); // Should use default values
+        assert_eq!(config.max_distance_meters, 250.0); // Should use default values
     }
 
     #[test]
