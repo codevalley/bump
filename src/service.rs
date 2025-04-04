@@ -39,7 +39,8 @@ impl MatchingService {
             queue: Arc::new(UnifiedQueue::new_with_config(
                 100, 
                 config.max_queue_size,
-                config.max_time_diff_ms
+                config.max_time_diff_ms,
+                config.max_distance_meters // Pass the value from config
             )), // Buffer size of 100 events
             config,
             start_time: Arc::new(Instant::now()),

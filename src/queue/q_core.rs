@@ -71,7 +71,7 @@ impl UnifiedQueue {
     }
     
     /// Creates a new queue with custom time difference configuration
-    pub fn new_with_config(event_buffer: usize, max_size: usize, max_time_diff_ms: i64) -> Self {
+    pub fn new_with_config(event_buffer: usize, max_size: usize, max_time_diff_ms: i64, max_distance_meters: f64) -> Self {
         let (tx, _) = broadcast::channel(event_buffer);
         
         // Log the max_time_diff_ms value for debugging
@@ -82,7 +82,7 @@ impl UnifiedQueue {
             event_tx: tx,
             max_size,
             max_time_diff_ms,
-            max_distance_meters: DEFAULT_MAX_DISTANCE_METERS,
+            max_distance_meters: max_distance_meters,
             min_score_without_key: DEFAULT_MIN_SCORE_WITHOUT_KEY,
             min_score_with_key: DEFAULT_MIN_SCORE_WITH_KEY,
             custom_key_match_bonus: DEFAULT_CUSTOM_KEY_MATCH_BONUS,
