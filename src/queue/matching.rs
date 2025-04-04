@@ -66,6 +66,9 @@ pub fn calculate_match_score(
         let delta_lat = (loc2.lat - loc1.lat).to_radians();
         let delta_lon = (loc2.long - loc1.long).to_radians();
         
+        log::info!("Comparing locations for {} and {}: Req1(lat:{}, lon:{}) vs Req2(lat:{}, lon:{})", 
+                 req1.id, req2.id, loc1.lat, loc1.long, loc2.lat, loc2.long);
+        
         // Haversine formula for distance calculation
         let a = (delta_lat / 2.0).sin().powi(2) + 
                lat1.cos() * lat2.cos() * (delta_lon / 2.0).sin().powi(2);
@@ -74,8 +77,8 @@ pub fn calculate_match_score(
         // Calculate distance using Earth radius constant
         let distance = EARTH_RADIUS_METERS * c;
         
-        log::debug!("Distance between {} and {}: {:.2}m (max allowed: {:.2}m)", 
-                  req1.id, req2.id, distance, max_distance_meters);
+        log::info!("Calculated distance: {:.2}m (Threshold: {:.2}m) between {} and {}", 
+                  distance, max_distance_meters, req1.id, req2.id);
         
         if distance <= max_distance_meters {
             // Calculate distance score (0-100)
@@ -83,6 +86,7 @@ pub fn calculate_match_score(
             let distance_score = 100 - ((distance / max_distance_meters) * 100.0) as i32;
             log::debug!("Location match between {} and {}: distance={:.2}m, score={}", 
                       req1.id, req2.id, distance, distance_score);
+            log::info!("Calculated distance score: {} for {} and {}", distance_score, req1.id, req2.id);
             score += distance_score;
             has_secondary_match = true;
         } else {
